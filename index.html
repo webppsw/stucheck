@@ -1,0 +1,2463 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบันทึกการมาเรียน - โรงเรียนพานพสกสวัสดิ์</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        /* Notification animations */
+        .notification-enter { 
+            animation: notificationSlideIn 0.3s ease-out; 
+        }
+        @keyframes notificationSlideIn { 
+            from { 
+                transform: translateX(100%); 
+                opacity: 0; 
+            } 
+            to { 
+                transform: translateX(0); 
+                opacity: 1; 
+            } 
+        }
+        
+        .notification-exit {
+            transition: all 0.3s ease-in;
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen font-sans">
+    <!-- Login Screen -->
+    <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md slide-in">
+            <div class="text-center mb-8">
+                <div class="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span class="text-white text-2xl">🏫</span>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800 mb-2">ระบบบันทึกการมาเรียน</h1>
+                <p class="text-gray-600">โรงเรียนพานพสกสวัสดิ์</p>
+            </div>
+            
+            <form id="loginForm" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อผู้ใช้</label>
+                    <input type="text" id="username" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="กรอกชื่อผู้ใช้" required>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">รหัสผ่าน</label>
+                    <input type="password" id="password" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="กรอกรหัสผ่าน" required>
+                </div>
+                
+                <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium">
+                    เข้าสู่ระบบ
+                </button>
+            </form>
+            
+            <div id="loginError" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden"></div>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="mainApp" class="hidden">
+        <!-- Navigation -->
+        <nav class="bg-white shadow-lg border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="flex justify-between items-center py-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="bg-blue-600 w-10 h-10 rounded-full flex items-center justify-center">
+                            <span class="text-white text-lg">🏫</span>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold text-gray-800">ระบบบันทึกการมาเรียน</h1>
+                            <p class="text-sm text-gray-600">โรงเรียนพานพสกสวัสดิ์</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <span id="userInfo" class="text-sm text-gray-600"></span>
+                        <button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition duration-200">
+                            ออกจากระบบ
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Menu Tabs -->
+                <div class="flex space-x-1 overflow-x-auto">
+                    <button class="nav-tab active px-6 py-3 text-sm font-medium rounded-t-lg" data-tab="dashboard">หน้าแรก</button>
+                    <button class="nav-tab px-6 py-3 text-sm font-medium rounded-t-lg" data-tab="attendance">เช็คชื่อ</button>
+                    <button class="nav-tab px-6 py-3 text-sm font-medium rounded-t-lg" data-tab="students">จัดการนักเรียน</button>
+                    <button class="nav-tab px-6 py-3 text-sm font-medium rounded-t-lg hidden" data-tab="users" id="usersTab">จัดการผู้ใช้</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboardTab" class="tab-content p-6">
+            <div class="max-w-7xl mx-auto">
+                <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold text-gray-800">สรุปการมาเรียนประจำวัน</h2>
+                        <div class="flex items-center space-x-4">
+                            <input type="date" id="summaryDate" class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <button id="refreshSummary" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                                รีเฟรช
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse border border-gray-300">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="border border-gray-300 px-4 py-3 text-left">ชั้นเรียน</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">นร.ทั้งหมด</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">ชาย</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">หญิง</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">มาชาย</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">มาหญิง</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">ขาดชาย</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">ขาดหญิง</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">ลาชาย</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">ลาหญิง</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">รวมมา</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">รวมขาด</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">รวมลา</th>
+                                </tr>
+                            </thead>
+                            <tbody id="summaryTableBody">
+                                <!-- Summary data will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attendance Tab -->
+        <div id="attendanceTab" class="tab-content hidden p-6">
+            <div class="max-w-7xl mx-auto">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">เช็คชื่อนักเรียน</h2>
+                        <div class="flex items-center space-x-4">
+                            <select id="classSelect" class="px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="">เลือกชั้นเรียน</option>
+                            </select>
+                            <input type="date" id="attendanceDate" class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <button id="saveAttendance" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+                                บันทึก
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="attendanceList" class="space-y-2">
+                        <!-- Attendance list will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Students Tab -->
+        <div id="studentsTab" class="tab-content hidden p-6">
+            <div class="max-w-7xl mx-auto">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">จัดการรายชื่อนักเรียน</h2>
+                        <div class="flex space-x-3">
+                            <button id="uploadExcelBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2 hidden">
+                                <span>📁</span>
+                                <span>อัปโหลด Excel</span>
+                            </button>
+                            <button id="addStudentBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                                เพิ่มนักเรียน
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <select id="studentClassFilter" class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">ทุกชั้นเรียน</option>
+                        </select>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse border border-gray-300">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="border border-gray-300 px-4 py-3 text-left">เลขที่</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">ชื่อ-นามสกุล</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">ชั้นเรียน</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">เพศ</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentsTableBody">
+                                <!-- Students data will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users Tab -->
+        <div id="usersTabContent" class="tab-content hidden p-6">
+            <div class="max-w-7xl mx-auto">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">จัดการผู้ใช้งาน</h2>
+                        <div class="flex space-x-3">
+                            <button id="uploadUsersExcelBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2">
+                                <span>📁</span>
+                                <span>อัปโหลด Excel ผู้ใช้</span>
+                            </button>
+                            <button id="addUserBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                                เพิ่มผู้ใช้
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse border border-gray-300">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="border border-gray-300 px-4 py-3 text-left">ชื่อผู้ใช้</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">ระดับสิทธิ์</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">ชั้นที่รับผิดชอบ</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <!-- Users data will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Modal -->
+    <div id="studentModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 slide-in">
+            <h3 id="studentModalTitle" class="text-xl font-bold mb-4">เพิ่มนักเรียน</h3>
+            <form id="studentForm" class="space-y-4">
+                <input type="hidden" id="studentId">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">เลขที่</label>
+                    <input type="number" id="studentNumber" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ-นามสกุล</label>
+                    <input type="text" id="studentName" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ชั้นเรียน</label>
+                    <select id="studentClass" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                        <option value="">เลือกชั้นเรียน</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">เพศ</label>
+                    <select id="studentGender" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                        <option value="">เลือกเพศ</option>
+                        <option value="ชาย">ชาย</option>
+                        <option value="หญิง">หญิง</option>
+                    </select>
+                </div>
+                <div class="flex space-x-3 pt-4">
+                    <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
+                        บันทึก
+                    </button>
+                    <button type="button" id="cancelStudentModal" class="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600">
+                        ยกเลิก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- User Modal -->
+    <div id="userModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 slide-in">
+            <h3 id="userModalTitle" class="text-xl font-bold mb-4">เพิ่มผู้ใช้</h3>
+            <form id="userForm" class="space-y-4">
+                <input type="hidden" id="userId">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อผู้ใช้</label>
+                    <input type="text" id="newUsername" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">รหัสผ่าน</label>
+                    <input type="password" id="newPassword" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ระดับสิทธิ์</label>
+                    <select id="userRole" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                        <option value="">เลือกระดับสิทธิ์</option>
+                        <option value="admin">Admin</option>
+                        <option value="view">View</option>
+                        <option value="teacher">Teacher</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ชั้นที่รับผิดชอบ</label>
+                    <select id="userClass" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        <option value="">ไม่ระบุ</option>
+                    </select>
+                </div>
+                <div class="flex space-x-3 pt-4">
+                    <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
+                        บันทึก
+                    </button>
+                    <button type="button" id="cancelUserModal" class="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600">
+                        ยกเลิก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Alert Modal -->
+    <div id="alertModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-[9999]">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 slide-in">
+            <div id="alertContent" class="text-center">
+                <div id="alertIcon" class="text-4xl mb-4"></div>
+                <h3 id="alertTitle" class="text-lg font-bold mb-2"></h3>
+                <p id="alertMessage" class="text-gray-600 mb-4 whitespace-pre-line"></p>
+                <button id="alertOkBtn" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
+                    ตกลง
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-[9999]">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 slide-in">
+            <div id="confirmContent" class="text-center">
+                <div id="confirmIcon" class="text-4xl mb-4">❓</div>
+                <h3 id="confirmTitle" class="text-lg font-bold mb-2">ยืนยันการดำเนินการ</h3>
+                <p id="confirmMessage" class="text-gray-600 mb-6 whitespace-pre-line text-left"></p>
+                <div class="flex space-x-3">
+                    <button id="confirmYesBtn" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                        ยืนยัน
+                    </button>
+                    <button id="confirmNoBtn" class="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
+                        ยกเลิก
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Users Excel Upload Modal -->
+    <div id="usersExcelUploadModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-[9000]">
+        <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 slide-in">
+            <h3 class="text-xl font-bold mb-4">อัปโหลดไฟล์ Excel ผู้ใช้งาน</h3>
+            
+            <!-- Upload Status -->
+            <div id="usersUploadStatus" class="hidden mb-4 p-3 rounded-lg">
+                <div class="flex items-center space-x-2">
+                    <div id="usersStatusIcon" class="text-lg"></div>
+                    <span id="usersStatusText" class="font-medium"></span>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <h4 class="font-medium text-blue-800 mb-2">รูปแบบไฟล์ Excel ที่ต้องการ:</h4>
+                    <div class="text-sm text-blue-700">
+                        <p>• คอลัมน์ A: Username (ชื่อผู้ใช้)</p>
+                        <p>• คอลัมน์ B: Password (รหัสผ่าน)</p>
+                        <p>• คอลัมน์ C: Role (ระดับสิทธิ์: admin, teacher, view)</p>
+                        <p>• คอลัมน์ D: ClassName (ชั้นที่รับผิดชอบ - ไม่บังคับ)</p>
+                    </div>
+                </div>
+                
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                    <input type="file" id="usersExcelFileInput" accept=".xlsx,.xls" class="hidden">
+                    <div id="usersDropZone" class="cursor-pointer">
+                        <div class="text-4xl mb-4">👥</div>
+                        <p class="text-lg font-medium text-gray-700 mb-2">คลิกเพื่อเลือกไฟล์ Excel ผู้ใช้</p>
+                        <p class="text-sm text-gray-500">หรือลากไฟล์มาวางที่นี่</p>
+                        <p class="text-xs text-gray-400 mt-2">รองรับไฟล์ .xlsx และ .xls</p>
+                    </div>
+                </div>
+                
+                <div id="usersFileInfo" class="mt-4 hidden">
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <p class="text-green-800 font-medium">ไฟล์ที่เลือก:</p>
+                        <p id="usersFileName" class="text-green-700"></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="usersPreviewSection" class="hidden mb-6">
+                <h4 class="font-medium text-gray-800 mb-3">ตัวอย่างข้อมูลที่จะนำเข้า:</h4>
+                <div class="max-h-64 overflow-y-auto border border-gray-300 rounded-lg">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="border-b border-gray-300 px-3 py-2 text-left">ชื่อผู้ใช้</th>
+                                <th class="border-b border-gray-300 px-3 py-2 text-left">รหัสผ่าน</th>
+                                <th class="border-b border-gray-300 px-3 py-2 text-left">ระดับสิทธิ์</th>
+                                <th class="border-b border-gray-300 px-3 py-2 text-left">ชั้นที่รับผิดชอบ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersPreviewTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div id="usersImportSummary" class="mt-3 text-sm text-gray-600"></div>
+            </div>
+            
+            <div class="flex space-x-3">
+                <button id="importUsersExcelBtn" class="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400" disabled>
+                    นำเข้าข้อมูลผู้ใช้
+                </button>
+                <button id="cancelUsersExcelModal" class="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600">
+                    ยกเลิก
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Excel Upload Modal -->
+    <div id="excelUploadModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-[9000]">
+        <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 slide-in">
+            <h3 class="text-xl font-bold mb-4">อัปโหลดไฟล์ Excel รายชื่อนักเรียน</h3>
+            
+            <!-- Upload Status -->
+            <div id="uploadStatus" class="hidden mb-4 p-3 rounded-lg">
+                <div class="flex items-center space-x-2">
+                    <div id="statusIcon" class="text-lg"></div>
+                    <span id="statusText" class="font-medium"></span>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <h4 class="font-medium text-blue-800 mb-2">รูปแบบไฟล์ Excel ที่ต้องการ:</h4>
+                    <div class="text-sm text-blue-700">
+                        <p>• คอลัมน์ A: ClassName (ชั้นเรียน เช่น ป.1/1, ป.2/2)</p>
+                        <p>• คอลัมน์ B: StudentNumber (เลขที่นักเรียน)</p>
+                        <p>• คอลัมน์ C: StudentFullName (ชื่อ-นามสกุล)</p>
+                        <p>• คอลัมน์ D: Gender (เพศ: ชาย หรือ หญิง)</p>
+                    </div>
+                </div>
+                
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                    <input type="file" id="excelFileInput" accept=".xlsx,.xls" class="hidden">
+                    <div id="dropZone" class="cursor-pointer">
+                        <div class="text-4xl mb-4">📁</div>
+                        <p class="text-lg font-medium text-gray-700 mb-2">คลิกเพื่อเลือกไฟล์ Excel</p>
+                        <p class="text-sm text-gray-500">หรือลากไฟล์มาวางที่นี่</p>
+                        <p class="text-xs text-gray-400 mt-2">รองรับไฟล์ .xlsx และ .xls</p>
+                    </div>
+                </div>
+                
+                <div id="fileInfo" class="mt-4 hidden">
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <p class="text-green-800 font-medium">ไฟล์ที่เลือก:</p>
+                        <p id="fileName" class="text-green-700"></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="previewSection" class="hidden mb-6">
+                <h4 class="font-medium text-gray-800 mb-3">ตัวอย่างข้อมูลที่จะนำเข้า:</h4>
+                <div class="max-h-64 overflow-y-auto border border-gray-300 rounded-lg">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="border-b border-gray-300 px-3 py-2 text-left">ชั้นเรียน</th>
+                                <th class="border-b border-gray-300 px-3 py-2 text-left">เลขที่</th>
+                                <th class="border-b border-gray-300 px-3 py-2 text-left">ชื่อ-นามสกุล</th>
+                                <th class="border-b border-gray-300 px-3 py-2 text-left">เพศ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div id="importSummary" class="mt-3 text-sm text-gray-600"></div>
+            </div>
+            
+            <div class="flex space-x-3">
+                <button id="importExcelBtn" class="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400" disabled>
+                    นำเข้าข้อมูล
+                </button>
+                <button id="cancelExcelModal" class="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600">
+                    ยกเลิก
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYobQaascRqX0EgxouiFP31qcjCfjs8jc",
+            authDomain: "stucheck-bcdfa.firebaseapp.com",
+            projectId: "stucheck-bcdfa",
+            storageBucket: "stucheck-bcdfa.firebasestorage.app",
+            messagingSenderId: "751529709162",
+            appId: "1:751529709162:web:ca85cec6fe4e159e3dc413",
+            measurementId: "G-C933P6GV1H"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Global variables
+        let currentUser = null;
+        let students = [];
+        let users = [];
+        let attendanceData = {};
+
+        // Class list
+        const classes = [
+            'อ.1/1', 'อ.2/1', 'อ.2/2', 'อ.3/1', 'อ.3/2', 'อ.3/3',
+            'ป.1/1', 'ป.1/2', 'ป.1/3', 'ป.2/1', 'ป.2/2', 'ป.2/3',
+            'ป.3/1', 'ป.3/2', 'ป.3/3', 'ป.4/1', 'ป.4/2', 'ป.4/3',
+            'ป.5/1', 'ป.5/2', 'ป.5/3', 'ป.6/1', 'ป.6/2', 'ป.6/3'
+        ];
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+            setupEventListeners();
+            populateClassSelects();
+            setCurrentDate();
+        });
+
+        async function initializeApp() {
+            try {
+                console.log('=== Initializing App ===');
+                console.log('Firebase config:', firebaseConfig);
+                
+                // Test Firebase connection
+                console.log('Testing Firebase connection...');
+                try {
+                    const testDoc = await db.collection('test').limit(1).get();
+                    console.log('Firebase connection successful');
+                } catch (fbError) {
+                    console.error('Firebase connection failed:', fbError);
+                    alert('ไม่สามารถเชื่อมต่อ Firebase ได้: ' + fbError.message);
+                    return;
+                }
+                
+                await initializeDefaultData();
+                await loadData();
+                console.log('=== App Initialization Complete ===');
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                alert('เกิดข้อผิดพลาดในการเริ่มต้นระบบ: ' + error.message);
+            }
+        }
+
+        async function initializeDefaultData() {
+            // Check if admin user exists, if not create it
+            const usersSnapshot = await db.collection('users').where('username', '==', 'admin').get();
+            if (usersSnapshot.empty) {
+                await db.collection('users').add({
+                    username: 'admin',
+                    password: 'admin123',
+                    role: 'admin',
+                    className: '',
+                    createdAt: new Date()
+                });
+            }
+        }
+
+        async function loadData() {
+            try {
+                console.log('Loading data from Firestore...');
+                
+                // Load users with better error handling
+                try {
+                    const usersSnapshot = await db.collection('users').get();
+                    users = usersSnapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    console.log('Loaded users:', users.length, users);
+                } catch (userError) {
+                    console.error('Error loading users:', userError);
+                    users = [];
+                }
+
+                // Load students with better error handling and no ordering initially
+                try {
+                    console.log('Attempting to load students...');
+                    const studentsSnapshot = await db.collection('students').get();
+                    students = studentsSnapshot.docs.map(doc => {
+                        const data = doc.data();
+                        console.log('Student document:', doc.id, data);
+                        return {
+                            id: doc.id,
+                            ...data
+                        };
+                    });
+                    console.log('Loaded students:', students.length, students);
+                    
+                    // Sort students locally
+                    students.sort((a, b) => {
+                        if (a.className !== b.className) {
+                            return (a.className || '').localeCompare(b.className || '');
+                        }
+                        return (a.studentNumber || 0) - (b.studentNumber || 0);
+                    });
+                } catch (studentError) {
+                    console.error('Error loading students:', studentError);
+                    students = [];
+                    alert('ไม่สามารถโหลดข้อมูลนักเรียนได้: ' + studentError.message);
+                }
+
+                // Load attendance for current month
+                await loadAttendanceData();
+                
+                updateUI();
+                
+                // If we're already logged in and on students tab, refresh the display
+                if (currentUser) {
+                    displayStudents();
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + error.message);
+            }
+        }
+
+        async function loadAttendanceData() {
+            const currentDate = new Date();
+            const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+            
+            try {
+                const attendanceSnapshot = await db.collection('attendance').doc(monthKey).get();
+                if (attendanceSnapshot.exists) {
+                    attendanceData = attendanceSnapshot.data();
+                } else {
+                    attendanceData = {};
+                }
+            } catch (error) {
+                console.error('Error loading attendance data:', error);
+                attendanceData = {};
+            }
+        }
+
+        function setupEventListeners() {
+            // Login form
+            document.getElementById('loginForm').addEventListener('submit', handleLogin);
+            
+            // Logout button
+            document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+            
+            // Navigation tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.addEventListener('click', (e) => switchTab(e.target.dataset.tab));
+            });
+            
+            // Date inputs
+            document.getElementById('summaryDate').addEventListener('change', updateSummary);
+            document.getElementById('attendanceDate').addEventListener('change', loadAttendanceForDate);
+            document.getElementById('refreshSummary').addEventListener('click', updateSummary);
+            
+            // Class select
+            document.getElementById('classSelect').addEventListener('change', loadStudentsForAttendance);
+            document.getElementById('studentClassFilter').addEventListener('change', filterStudents);
+            
+            // Buttons
+            document.getElementById('addStudentBtn').addEventListener('click', () => openStudentModal());
+            document.getElementById('addUserBtn').addEventListener('click', () => openUserModal());
+            document.getElementById('uploadExcelBtn').addEventListener('click', openExcelUploadModal);
+            document.getElementById('uploadUsersExcelBtn').addEventListener('click', openUsersExcelUploadModal);
+            document.getElementById('saveAttendance').addEventListener('click', saveAttendance);
+            
+            // Modal forms
+            document.getElementById('studentForm').addEventListener('submit', saveStudent);
+            document.getElementById('userForm').addEventListener('submit', saveUser);
+            document.getElementById('cancelStudentModal').addEventListener('click', closeStudentModal);
+            document.getElementById('cancelUserModal').addEventListener('click', closeUserModal);
+            document.getElementById('cancelExcelModal').addEventListener('click', closeExcelUploadModal);
+            document.getElementById('importExcelBtn').addEventListener('click', importExcelData);
+            document.getElementById('cancelUsersExcelModal').addEventListener('click', closeUsersExcelUploadModal);
+            document.getElementById('importUsersExcelBtn').addEventListener('click', importUsersExcelData);
+            
+            // Alert modal
+            document.getElementById('alertOkBtn').addEventListener('click', closeAlert);
+            
+            // Excel upload handlers
+            setupExcelUploadHandlers();
+            setupUsersExcelUploadHandlers();
+        }
+
+        function populateClassSelects() {
+            const selects = ['classSelect', 'studentClass', 'studentClassFilter', 'userClass'];
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                
+                // Clear existing options except the first one
+                while (select.children.length > 1) {
+                    select.removeChild(select.lastChild);
+                }
+                
+                // Determine which classes to show based on user role and current select
+                let classesToShow = classes;
+                
+                if (currentUser && currentUser.role === 'teacher' && currentUser.className) {
+                    // For teachers, only show their assigned class in attendance and student management
+                    if (selectId === 'classSelect' || selectId === 'studentClassFilter') {
+                        classesToShow = [currentUser.className];
+                    } else if (selectId === 'studentClass') {
+                        // In student form, also restrict to teacher's class
+                        classesToShow = [currentUser.className];
+                    } else {
+                        // For userClass (admin only), show all classes
+                        classesToShow = classes;
+                    }
+                } else {
+                    // For admin and view users, show all classes
+                    classesToShow = classes;
+                }
+                
+                classesToShow.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    select.appendChild(option);
+                });
+                
+                // Auto-select teacher's class if applicable
+                if (currentUser && currentUser.role === 'teacher' && currentUser.className && 
+                    (selectId === 'classSelect' || selectId === 'studentClassFilter')) {
+                    select.value = currentUser.className;
+                }
+            });
+        }
+
+        function setCurrentDate() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('summaryDate').value = today;
+            document.getElementById('attendanceDate').value = today;
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            const user = users.find(u => u.username === username && u.password === password);
+            
+            if (user) {
+                currentUser = user;
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                document.getElementById('userInfo').textContent = `${user.username} (${user.role})`;
+                
+                // Show/hide tabs based on user role
+                updateTabVisibility();
+                
+                // Load initial data for dashboard
+                updateSummary();
+                
+                // Load students data for the students tab
+                displayStudents();
+                
+                // Clear login form
+                document.getElementById('loginForm').reset();
+                document.getElementById('loginError').classList.add('hidden');
+            } else {
+                document.getElementById('loginError').textContent = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        }
+
+        function handleLogout() {
+            currentUser = null;
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('loginForm').reset();
+        }
+
+        function updateTabVisibility() {
+            const usersTab = document.getElementById('usersTab');
+            const uploadExcelBtn = document.getElementById('uploadExcelBtn');
+            
+            if (currentUser.role === 'admin') {
+                usersTab.classList.remove('hidden');
+                uploadExcelBtn.classList.remove('hidden');
+            } else {
+                usersTab.classList.add('hidden');
+                uploadExcelBtn.classList.add('hidden');
+            }
+            
+            // Update class selects based on user role
+            populateClassSelects();
+        }
+
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active', 'bg-blue-600', 'text-white');
+                tab.classList.add('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+            });
+            
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active', 'bg-blue-600', 'text-white');
+            document.querySelector(`[data-tab="${tabName}"]`).classList.remove('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+            
+            // Show/hide tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            
+            const tabContent = tabName === 'users' ? 'usersTabContent' : `${tabName}Tab`;
+            document.getElementById(tabContent).classList.remove('hidden');
+            
+            // Load data for specific tabs
+            if (tabName === 'students') {
+                populateClassSelects(); // Refresh class selects for current user
+                displayStudents();
+            } else if (tabName === 'users' && currentUser.role === 'admin') {
+                displayUsers();
+            } else if (tabName === 'dashboard') {
+                updateSummary();
+            } else if (tabName === 'attendance') {
+                populateClassSelects(); // Refresh class selects for current user
+                loadStudentsForAttendance();
+            }
+        }
+
+        async function updateSummary() {
+            const selectedDate = document.getElementById('summaryDate').value;
+            const tbody = document.getElementById('summaryTableBody');
+            tbody.innerHTML = '';
+            
+            for (const className of classes) {
+                const classStudents = students.filter(s => s.className === className);
+                const maleStudents = classStudents.filter(s => s.gender === 'ชาย');
+                const femaleStudents = classStudents.filter(s => s.gender === 'หญิง');
+                
+                // Get attendance data for this date and class
+                const dateKey = selectedDate;
+                const classAttendance = attendanceData[dateKey]?.[className] || {};
+                
+                let presentMale = 0, presentFemale = 0;
+                let absentMale = 0, absentFemale = 0;
+                let leaveMale = 0, leaveFemale = 0;
+                
+                maleStudents.forEach(student => {
+                    const status = classAttendance[student.id] || 'absent';
+                    if (status === 'present') presentMale++;
+                    else if (status === 'absent') absentMale++;
+                    else if (status === 'leave') leaveMale++;
+                });
+                
+                femaleStudents.forEach(student => {
+                    const status = classAttendance[student.id] || 'absent';
+                    if (status === 'present') presentFemale++;
+                    else if (status === 'absent') absentFemale++;
+                    else if (status === 'leave') leaveFemale++;
+                });
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border border-gray-300 px-4 py-2 font-medium">${className}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center">${classStudents.length}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center">${maleStudents.length}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center">${femaleStudents.length}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center text-green-600">${presentMale}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center text-green-600">${presentFemale}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center text-red-600">${absentMale}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center text-red-600">${absentFemale}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center text-yellow-600">${leaveMale}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center text-yellow-600">${leaveFemale}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center font-medium text-green-600">${presentMale + presentFemale}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center font-medium text-red-600">${absentMale + absentFemale}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center font-medium text-yellow-600">${leaveMale + leaveFemale}</td>
+                `;
+                tbody.appendChild(row);
+            }
+        }
+
+        function loadStudentsForAttendance() {
+            const selectedClass = document.getElementById('classSelect').value;
+            const attendanceList = document.getElementById('attendanceList');
+            attendanceList.innerHTML = '';
+            
+            if (!selectedClass) return;
+            
+            // Check if teacher has permission for this class
+            if (currentUser && currentUser.role === 'teacher' && currentUser.className) {
+                if (selectedClass !== currentUser.className) {
+                    attendanceList.innerHTML = '<div class="text-center text-red-600 p-4">คุณไม่มีสิทธิ์เข้าถึงข้อมูลชั้นเรียนนี้</div>';
+                    return;
+                }
+            }
+            
+            const classStudents = students.filter(s => s.className === selectedClass);
+            const selectedDate = document.getElementById('attendanceDate').value;
+            const dateKey = selectedDate;
+            const classAttendance = attendanceData[dateKey]?.[selectedClass] || {};
+            
+            // Check if attendance has been taken for this date and class
+            const hasExistingAttendance = Object.keys(classAttendance).length > 0;
+            
+            // Show status message
+            if (hasExistingAttendance) {
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg';
+                statusDiv.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <span class="text-blue-600">ℹ️</span>
+                        <span class="text-blue-800 font-medium">แสดงข้อมูลการเช็คชื่อที่บันทึกไว้แล้ว</span>
+                    </div>
+                `;
+                attendanceList.appendChild(statusDiv);
+            } else {
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'mb-4 p-3 bg-green-50 border border-green-200 rounded-lg';
+                statusDiv.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <span class="text-green-600">✨</span>
+                        <span class="text-green-800 font-medium">เริ่มเช็คชื่อใหม่ - ตั้งค่าเริ่มต้นเป็น "มา" ทุกคน</span>
+                    </div>
+                `;
+                attendanceList.appendChild(statusDiv);
+            }
+            
+            classStudents.forEach(student => {
+                // Set default status: if no existing data, default to 'present'
+                const status = hasExistingAttendance ? (classAttendance[student.id] || 'absent') : 'present';
+                
+                // If no existing attendance, set default to present
+                if (!hasExistingAttendance) {
+                    if (!attendanceData[dateKey]) attendanceData[dateKey] = {};
+                    if (!attendanceData[dateKey][selectedClass]) attendanceData[dateKey][selectedClass] = {};
+                    attendanceData[dateKey][selectedClass][student.id] = 'present';
+                }
+                
+                const studentDiv = document.createElement('div');
+                studentDiv.className = 'flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-gray-50';
+                studentDiv.innerHTML = `
+                    <div class="flex items-center space-x-4">
+                        <span class="w-12 text-center font-medium">${student.studentNumber}</span>
+                        <span class="font-medium">${student.studentFullName}</span>
+                        <span class="text-sm text-gray-600">(${student.gender})</span>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button class="attendance-btn ${status === 'present' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'} px-3 py-1 rounded" 
+                                data-student="${student.id}" data-status="present">มา</button>
+                        <button class="attendance-btn ${status === 'absent' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700'} px-3 py-1 rounded" 
+                                data-student="${student.id}" data-status="absent">ขาด</button>
+                        <button class="attendance-btn ${status === 'leave' ? 'bg-yellow-600 text-white' : 'bg-gray-200 text-gray-700'} px-3 py-1 rounded" 
+                                data-student="${student.id}" data-status="leave">ลา</button>
+                    </div>
+                `;
+                
+                // Add event listeners to attendance buttons
+                studentDiv.querySelectorAll('.attendance-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const studentId = e.target.dataset.student;
+                        const newStatus = e.target.dataset.status;
+                        
+                        // Update button states
+                        studentDiv.querySelectorAll('.attendance-btn').forEach(b => {
+                            b.classList.remove('bg-green-600', 'bg-red-600', 'bg-yellow-600', 'text-white');
+                            b.classList.add('bg-gray-200', 'text-gray-700');
+                        });
+                        
+                        e.target.classList.remove('bg-gray-200', 'text-gray-700');
+                        if (newStatus === 'present') {
+                            e.target.classList.add('bg-green-600', 'text-white');
+                        } else if (newStatus === 'absent') {
+                            e.target.classList.add('bg-red-600', 'text-white');
+                        } else if (newStatus === 'leave') {
+                            e.target.classList.add('bg-yellow-600', 'text-white');
+                        }
+                        
+                        // Store attendance data temporarily
+                        if (!attendanceData[dateKey]) attendanceData[dateKey] = {};
+                        if (!attendanceData[dateKey][selectedClass]) attendanceData[dateKey][selectedClass] = {};
+                        attendanceData[dateKey][selectedClass][studentId] = newStatus;
+                        
+                        // Show brief feedback
+                        showAttendanceChangeNotification(student.studentFullName, newStatus);
+                    });
+                });
+                
+                attendanceList.appendChild(studentDiv);
+            });
+        }
+        
+        function showAttendanceChangeNotification(studentName, status) {
+            const statusText = {
+                'present': 'มา',
+                'absent': 'ขาด', 
+                'leave': 'ลา'
+            };
+            
+            const statusColor = {
+                'present': 'text-green-600',
+                'absent': 'text-red-600',
+                'leave': 'text-yellow-600'
+            };
+            
+            const statusIcon = {
+                'present': '✅',
+                'absent': '❌',
+                'leave': '📝'
+            };
+            
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `fixed top-20 right-4 bg-white border-l-4 ${status === 'present' ? 'border-green-500' : status === 'absent' ? 'border-red-500' : 'border-yellow-500'} shadow-lg rounded-lg p-3 z-50 notification-enter`;
+            notification.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <span class="text-lg">${statusIcon[status]}</span>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="${statusColor[status]} font-medium">${statusText[status]}:</span>
+                            <span class="text-gray-700 font-medium">${studentName}</span>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">เช็คชื่อเรียบร้อยแล้ว</div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove notification after 2.5 seconds
+            setTimeout(() => {
+                notification.classList.add('notification-exit');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 2500);
+        }
+
+        function loadAttendanceForDate() {
+            loadStudentsForAttendance();
+        }
+
+        async function saveAttendance() {
+            const selectedDate = document.getElementById('attendanceDate').value;
+            const currentDate = new Date(selectedDate);
+            const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+            
+            try {
+                await db.collection('attendance').doc(monthKey).set(attendanceData, { merge: true });
+                showAlert('บันทึกการเช็คชื่อเรียบร้อยแล้ว', 'success');
+                updateSummary();
+            } catch (error) {
+                console.error('Error saving attendance:', error);
+                showAlert('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+            }
+        }
+
+        function displayStudents() {
+            console.log('=== displayStudents called ===');
+            console.log('Total students in array:', students.length);
+            console.log('Students data:', students);
+            
+            const tbody = document.getElementById('studentsTableBody');
+            if (!tbody) {
+                console.error('studentsTableBody element not found!');
+                return;
+            }
+            
+            tbody.innerHTML = '';
+            
+            let baseStudents = students;
+            
+            // Filter by user role first
+            if (currentUser && currentUser.role === 'teacher' && currentUser.className) {
+                baseStudents = students.filter(s => s.className === currentUser.className);
+                console.log('Teacher filter applied, showing only class:', currentUser.className);
+            }
+            
+            const filterValue = document.getElementById('studentClassFilter').value;
+            console.log('Filter value:', filterValue);
+            
+            const filteredStudents = filterValue 
+                ? baseStudents.filter(s => s.className === filterValue)
+                : baseStudents;
+            
+            console.log('Filtered students count:', filteredStudents.length);
+            console.log('Filtered students:', filteredStudents);
+            
+            if (filteredStudents.length === 0) {
+                const row = document.createElement('tr');
+                const message = students.length === 0 
+                    ? 'ยังไม่มีข้อมูลนักเรียน - กรุณาตรวจสอบการเชื่อมต่อ Firebase' 
+                    : 'ไม่พบนักเรียนในชั้นเรียนที่เลือก';
+                    
+                row.innerHTML = `
+                    <td colspan="5" class="border border-gray-300 px-4 py-8 text-center text-gray-500">
+                        ${message}
+                        <br><small class="text-xs">Debug: Total students = ${students.length}</small>
+                    </td>
+                `;
+                tbody.appendChild(row);
+                return;
+            }
+            
+            filteredStudents.forEach((student, index) => {
+                console.log(`Creating row for student ${index + 1}:`, student);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border border-gray-300 px-4 py-2">${student.studentNumber || '-'}</td>
+                    <td class="border border-gray-300 px-4 py-2">${student.studentFullName || student.StudentFullName || '-'}</td>
+                    <td class="border border-gray-300 px-4 py-2">${student.className || student.ClassName || '-'}</td>
+                    <td class="border border-gray-300 px-4 py-2">${student.gender || student.Gender || '-'}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center">
+                        <button class="bg-blue-500 text-white px-2 py-1 rounded text-sm mr-2 hover:bg-blue-600" onclick="editStudent('${student.id}')">แก้ไข</button>
+                        <button class="bg-red-500 text-white px-2 py-1 rounded text-sm hover:bg-red-600" onclick="deleteStudent('${student.id}')">ลบ</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            console.log('=== displayStudents completed ===');
+        }
+
+        function displayUsers() {
+            console.log('=== displayUsers called ===');
+            console.log('Total users in array:', users.length);
+            console.log('Users data:', users);
+            
+            const tbody = document.getElementById('usersTableBody');
+            if (!tbody) {
+                console.error('usersTableBody element not found!');
+                return;
+            }
+            
+            tbody.innerHTML = '';
+            
+            if (users.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td colspan="4" class="border border-gray-300 px-4 py-8 text-center text-gray-500">
+                        ยังไม่มีข้อมูลผู้ใช้ - กรุณาตรวจสอบการเชื่อมต่อ Firebase
+                        <br><small class="text-xs">Debug: Total users = ${users.length}</small>
+                    </td>
+                `;
+                tbody.appendChild(row);
+                return;
+            }
+            
+            users.forEach((user, index) => {
+                console.log(`Creating row for user ${index + 1}:`, user);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border border-gray-300 px-4 py-2">${user.username || '-'}</td>
+                    <td class="border border-gray-300 px-4 py-2">${user.role || '-'}</td>
+                    <td class="border border-gray-300 px-4 py-2">${user.className || '-'}</td>
+                    <td class="border border-gray-300 px-4 py-2 text-center">
+                        <button class="bg-blue-500 text-white px-2 py-1 rounded text-sm mr-2 hover:bg-blue-600" onclick="editUser('${user.id}')">แก้ไข</button>
+                        <button class="bg-red-500 text-white px-2 py-1 rounded text-sm hover:bg-red-600" onclick="deleteUser('${user.id}')">ลบ</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            console.log('=== displayUsers completed ===');
+        }
+
+        function filterStudents() {
+            displayStudents();
+        }
+
+        function openStudentModal(studentId = null) {
+            const modal = document.getElementById('studentModal');
+            const title = document.getElementById('studentModalTitle');
+            const form = document.getElementById('studentForm');
+            
+            if (studentId) {
+                const student = students.find(s => s.id === studentId);
+                title.textContent = 'แก้ไขนักเรียน';
+                document.getElementById('studentId').value = student.id;
+                document.getElementById('studentNumber').value = student.studentNumber;
+                document.getElementById('studentName').value = student.studentFullName;
+                document.getElementById('studentClass').value = student.className;
+                document.getElementById('studentGender').value = student.gender;
+            } else {
+                title.textContent = 'เพิ่มนักเรียน';
+                form.reset();
+                document.getElementById('studentId').value = '';
+            }
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeStudentModal() {
+            document.getElementById('studentModal').classList.add('hidden');
+            document.getElementById('studentModal').classList.remove('flex');
+        }
+
+        async function saveStudent(e) {
+            e.preventDefault();
+            
+            const studentData = {
+                studentNumber: parseInt(document.getElementById('studentNumber').value),
+                studentFullName: document.getElementById('studentName').value,
+                className: document.getElementById('studentClass').value,
+                gender: document.getElementById('studentGender').value
+            };
+            
+            // Check if teacher has permission for this class
+            if (currentUser && currentUser.role === 'teacher' && currentUser.className) {
+                if (studentData.className !== currentUser.className) {
+                    showAlert('คุณไม่มีสิทธิ์จัดการนักเรียนในชั้นเรียนนี้\nคุณสามารถจัดการได้เฉพาะชั้น: ' + currentUser.className, 'error');
+                    return;
+                }
+            }
+            
+            const studentId = document.getElementById('studentId').value;
+            
+            try {
+                if (studentId) {
+                    await db.collection('students').doc(studentId).update(studentData);
+                } else {
+                    await db.collection('students').add({
+                        ...studentData,
+                        createdAt: new Date()
+                    });
+                }
+                
+                await loadData();
+                closeStudentModal();
+                displayStudents();
+                showAlert(studentId ? 'แก้ไขข้อมูลนักเรียนเรียบร้อยแล้ว' : 'เพิ่มนักเรียนเรียบร้อยแล้ว', 'success');
+            } catch (error) {
+                console.error('Error saving student:', error);
+                alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+            }
+        }
+
+        function editStudent(studentId) {
+            const student = students.find(s => s.id === studentId);
+            
+            // Check if teacher has permission for this student's class
+            if (currentUser && currentUser.role === 'teacher' && currentUser.className) {
+                if (student && student.className !== currentUser.className) {
+                    showAlert('คุณไม่มีสิทธิ์แก้ไขนักเรียนในชั้นเรียนนี้\nคุณสามารถจัดการได้เฉพาะชั้น: ' + currentUser.className, 'error');
+                    return;
+                }
+            }
+            
+            openStudentModal(studentId);
+        }
+
+        async function deleteStudent(studentId) {
+            const student = students.find(s => s.id === studentId);
+            const studentName = student ? student.studentFullName : 'นักเรียนคนนี้';
+            
+            // Check if teacher has permission for this student's class
+            if (currentUser && currentUser.role === 'teacher' && currentUser.className) {
+                if (student && student.className !== currentUser.className) {
+                    showAlert('คุณไม่มีสิทธิ์ลบนักเรียนในชั้นเรียนนี้\nคุณสามารถจัดการได้เฉพาะชั้น: ' + currentUser.className, 'error');
+                    return;
+                }
+            }
+            
+            const confirmed = await showConfirm(
+                `คุณต้องการลบ "${studentName}" หรือไม่?\n\nการลบจะไม่สามารถกู้คืนได้`,
+                'ยืนยันการลบนักเรียน'
+            );
+            
+            if (confirmed) {
+                try {
+                    await db.collection('students').doc(studentId).delete();
+                    await loadData();
+                    displayStudents();
+                    showAlert('ลบนักเรียนเรียบร้อยแล้ว', 'success');
+                } catch (error) {
+                    console.error('Error deleting student:', error);
+                    showAlert('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
+                }
+            }
+        }
+
+        function openUserModal(userId = null) {
+            const modal = document.getElementById('userModal');
+            const title = document.getElementById('userModalTitle');
+            const form = document.getElementById('userForm');
+            
+            if (userId) {
+                const user = users.find(u => u.id === userId);
+                title.textContent = 'แก้ไขผู้ใช้';
+                document.getElementById('userId').value = user.id;
+                document.getElementById('newUsername').value = user.username;
+                document.getElementById('newPassword').value = user.password;
+                document.getElementById('userRole').value = user.role;
+                document.getElementById('userClass').value = user.className || '';
+            } else {
+                title.textContent = 'เพิ่มผู้ใช้';
+                form.reset();
+                document.getElementById('userId').value = '';
+            }
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeUserModal() {
+            document.getElementById('userModal').classList.add('hidden');
+            document.getElementById('userModal').classList.remove('flex');
+        }
+
+        async function saveUser(e) {
+            e.preventDefault();
+            
+            const userData = {
+                username: document.getElementById('newUsername').value,
+                password: document.getElementById('newPassword').value,
+                role: document.getElementById('userRole').value,
+                className: document.getElementById('userClass').value || ''
+            };
+            
+            const userId = document.getElementById('userId').value;
+            
+            try {
+                if (userId) {
+                    await db.collection('users').doc(userId).update(userData);
+                } else {
+                    await db.collection('users').add({
+                        ...userData,
+                        createdAt: new Date()
+                    });
+                }
+                
+                await loadData();
+                closeUserModal();
+                displayUsers();
+                showAlert(userId ? 'แก้ไขข้อมูลผู้ใช้เรียบร้อยแล้ว' : 'เพิ่มผู้ใช้เรียบร้อยแล้ว', 'success');
+            } catch (error) {
+                console.error('Error saving user:', error);
+                alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+            }
+        }
+
+        function editUser(userId) {
+            openUserModal(userId);
+        }
+
+        async function deleteUser(userId) {
+            const user = users.find(u => u.id === userId);
+            const username = user ? user.username : 'ผู้ใช้คนนี้';
+            
+            const confirmed = await showConfirm(
+                `คุณต้องการลบผู้ใช้ "${username}" หรือไม่?\n\nการลบจะไม่สามารถกู้คืนได้`,
+                'ยืนยันการลบผู้ใช้'
+            );
+            
+            if (confirmed) {
+                try {
+                    await db.collection('users').doc(userId).delete();
+                    await loadData();
+                    displayUsers();
+                    showAlert('ลบผู้ใช้เรียบร้อยแล้ว', 'success');
+                } catch (error) {
+                    console.error('Error deleting user:', error);
+                    showAlert('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
+                }
+            }
+        }
+
+        function updateUI() {
+            // Update tab styles
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                if (tab.classList.contains('active')) {
+                    tab.classList.add('bg-blue-600', 'text-white');
+                    tab.classList.remove('bg-gray-100', 'text-gray-600');
+                } else {
+                    tab.classList.add('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+                    tab.classList.remove('bg-blue-600', 'text-white');
+                }
+            });
+        }
+
+        // Alert and Status Functions
+        function showAlert(message, type = 'info') {
+            const modal = document.getElementById('alertModal');
+            const icon = document.getElementById('alertIcon');
+            const title = document.getElementById('alertTitle');
+            const messageEl = document.getElementById('alertMessage');
+            
+            // Set icon and title based on type
+            switch (type) {
+                case 'success':
+                    icon.textContent = '✅';
+                    title.textContent = 'สำเร็จ';
+                    title.className = 'text-lg font-bold mb-2 text-green-600';
+                    break;
+                case 'error':
+                    icon.textContent = '❌';
+                    title.textContent = 'เกิดข้อผิดพลาด';
+                    title.className = 'text-lg font-bold mb-2 text-red-600';
+                    break;
+                case 'warning':
+                    icon.textContent = '⚠️';
+                    title.textContent = 'คำเตือน';
+                    title.className = 'text-lg font-bold mb-2 text-yellow-600';
+                    break;
+                default:
+                    icon.textContent = 'ℹ️';
+                    title.textContent = 'ข้อมูล';
+                    title.className = 'text-lg font-bold mb-2 text-blue-600';
+            }
+            
+            messageEl.textContent = message;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+        
+        function closeAlert() {
+            document.getElementById('alertModal').classList.add('hidden');
+            document.getElementById('alertModal').classList.remove('flex');
+        }
+
+        // Confirm Modal Functions
+        function showConfirm(message, title = 'ยืนยันการดำเนินการ') {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirmModal');
+                const titleEl = document.getElementById('confirmTitle');
+                const messageEl = document.getElementById('confirmMessage');
+                const yesBtn = document.getElementById('confirmYesBtn');
+                const noBtn = document.getElementById('confirmNoBtn');
+                
+                titleEl.textContent = title;
+                messageEl.textContent = message;
+                
+                // Remove existing event listeners
+                const newYesBtn = yesBtn.cloneNode(true);
+                const newNoBtn = noBtn.cloneNode(true);
+                yesBtn.parentNode.replaceChild(newYesBtn, yesBtn);
+                noBtn.parentNode.replaceChild(newNoBtn, noBtn);
+                
+                // Add new event listeners
+                newYesBtn.addEventListener('click', () => {
+                    closeConfirm();
+                    resolve(true);
+                });
+                
+                newNoBtn.addEventListener('click', () => {
+                    closeConfirm();
+                    resolve(false);
+                });
+                
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            });
+        }
+        
+        function closeConfirm() {
+            document.getElementById('confirmModal').classList.add('hidden');
+            document.getElementById('confirmModal').classList.remove('flex');
+        }
+        
+        function showUploadStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('uploadStatus');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusText = document.getElementById('statusText');
+            
+            // Set icon and style based on type
+            switch (type) {
+                case 'loading':
+                    statusIcon.textContent = '⏳';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200';
+                    statusText.className = 'font-medium text-blue-800';
+                    break;
+                case 'success':
+                    statusIcon.textContent = '✅';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-green-50 border border-green-200';
+                    statusText.className = 'font-medium text-green-800';
+                    break;
+                case 'error':
+                    statusIcon.textContent = '❌';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-red-50 border border-red-200';
+                    statusText.className = 'font-medium text-red-800';
+                    break;
+                case 'warning':
+                    statusIcon.textContent = '⚠️';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-yellow-50 border border-yellow-200';
+                    statusText.className = 'font-medium text-yellow-800';
+                    break;
+                default:
+                    statusIcon.textContent = 'ℹ️';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200';
+                    statusText.className = 'font-medium text-gray-800';
+            }
+            
+            statusText.textContent = message;
+            statusDiv.classList.remove('hidden');
+        }
+        
+        function hideUploadStatus() {
+            document.getElementById('uploadStatus').classList.add('hidden');
+        }
+
+        // Excel Upload Functions
+        let excelData = [];
+        let usersExcelData = [];
+
+        // Users Excel Upload Functions
+        function openUsersExcelUploadModal() {
+            document.getElementById('usersExcelUploadModal').classList.remove('hidden');
+            document.getElementById('usersExcelUploadModal').classList.add('flex');
+            resetUsersExcelModal();
+        }
+
+        function closeUsersExcelUploadModal() {
+            document.getElementById('usersExcelUploadModal').classList.add('hidden');
+            document.getElementById('usersExcelUploadModal').classList.remove('flex');
+            resetUsersExcelModal();
+        }
+
+        function resetUsersExcelModal() {
+            document.getElementById('usersExcelFileInput').value = '';
+            document.getElementById('usersFileInfo').classList.add('hidden');
+            document.getElementById('usersPreviewSection').classList.add('hidden');
+            document.getElementById('importUsersExcelBtn').disabled = true;
+            hideUsersUploadStatus();
+            usersExcelData = [];
+        }
+
+        function showUsersUploadStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('usersUploadStatus');
+            const statusIcon = document.getElementById('usersStatusIcon');
+            const statusText = document.getElementById('usersStatusText');
+            
+            // Set icon and style based on type
+            switch (type) {
+                case 'loading':
+                    statusIcon.textContent = '⏳';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200';
+                    statusText.className = 'font-medium text-blue-800';
+                    break;
+                case 'success':
+                    statusIcon.textContent = '✅';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-green-50 border border-green-200';
+                    statusText.className = 'font-medium text-green-800';
+                    break;
+                case 'error':
+                    statusIcon.textContent = '❌';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-red-50 border border-red-200';
+                    statusText.className = 'font-medium text-red-800';
+                    break;
+                case 'warning':
+                    statusIcon.textContent = '⚠️';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-yellow-50 border border-yellow-200';
+                    statusText.className = 'font-medium text-yellow-800';
+                    break;
+                default:
+                    statusIcon.textContent = 'ℹ️';
+                    statusDiv.className = 'mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200';
+                    statusText.className = 'font-medium text-gray-800';
+            }
+            
+            statusText.textContent = message;
+            statusDiv.classList.remove('hidden');
+        }
+        
+        function hideUsersUploadStatus() {
+            document.getElementById('usersUploadStatus').classList.add('hidden');
+        }
+
+        function setupUsersExcelUploadHandlers() {
+            const fileInput = document.getElementById('usersExcelFileInput');
+            const dropZone = document.getElementById('usersDropZone');
+            
+            // Click to select file
+            dropZone.addEventListener('click', () => fileInput.click());
+            
+            // File input change
+            fileInput.addEventListener('change', handleUsersFileSelect);
+            
+            // Drag and drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-blue-400', 'bg-blue-50');
+            });
+            
+            dropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleUsersFile(files[0]);
+                }
+            });
+        }
+
+        function handleUsersFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleUsersFile(file);
+            }
+        }
+
+        function handleUsersFile(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/)) {
+                showAlert('กรุณาเลือกไฟล์ Excel (.xlsx หรือ .xls)', 'error');
+                return;
+            }
+            
+            document.getElementById('usersFileName').textContent = file.name;
+            document.getElementById('usersFileInfo').classList.remove('hidden');
+            
+            // Show loading status
+            showUsersUploadStatus('กำลังอ่านไฟล์...', 'loading');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    console.log('Reading users file:', file.name);
+                    showUsersUploadStatus('กำลังแปลงข้อมูล...', 'loading');
+                    
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    console.log('Workbook sheets:', workbook.SheetNames);
+                    
+                    if (workbook.SheetNames.length === 0) {
+                        showUsersUploadStatus('ไม่พบแผ่นงานในไฟล์ Excel', 'error');
+                        return;
+                    }
+                    
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // Parse with better error handling
+                    let jsonData;
+                    try {
+                        jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                            header: 1,
+                            defval: '',
+                            blankrows: false,
+                            raw: false
+                        });
+                        
+                        if (!jsonData || jsonData.length === 0) {
+                            jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                                defval: '',
+                                blankrows: false
+                            });
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing worksheet:', parseError);
+                        showUsersUploadStatus('เกิดข้อผิดพลาดในการแปลงข้อมูล Excel', 'error');
+                        return;
+                    }
+                    
+                    console.log('Parsed users JSON data:', jsonData);
+                    
+                    if (!jsonData || jsonData.length === 0) {
+                        showUsersUploadStatus('ไฟล์ Excel ว่างเปล่าหรือไม่มีข้อมูล', 'error');
+                        return;
+                    }
+                    
+                    showUsersUploadStatus('กำลังประมวลผลข้อมูล...', 'loading');
+                    setTimeout(() => {
+                        processUsersExcelData(jsonData);
+                    }, 100);
+                    
+                } catch (error) {
+                    console.error('Error reading users Excel file:', error);
+                    showUsersUploadStatus('เกิดข้อผิดพลาดในการอ่านไฟล์ Excel: ' + error.message, 'error');
+                }
+            };
+            
+            reader.onerror = function(error) {
+                console.error('FileReader error:', error);
+                showUsersUploadStatus('เกิดข้อผิดพลาดในการอ่านไฟล์', 'error');
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processUsersExcelData(rawData) {
+            usersExcelData = [];
+            const errors = [];
+            
+            console.log('Raw users Excel data:', rawData);
+            
+            try {
+                // Handle both array format and object format
+                let dataRows = [];
+                
+                if (Array.isArray(rawData) && rawData.length > 0) {
+                    if (Array.isArray(rawData[0])) {
+                        // Array format (header: 1)
+                        dataRows = rawData;
+                    } else {
+                        // Object format - convert to array format
+                        const keys = Object.keys(rawData[0]);
+                        dataRows = [keys]; // Header row
+                        rawData.forEach(obj => {
+                            const row = keys.map(key => obj[key]);
+                            dataRows.push(row);
+                        });
+                    }
+                } else {
+                    showUsersUploadStatus('ไม่พบข้อมูลในไฟล์ Excel', 'error');
+                    return;
+                }
+                
+                console.log('Processed users data rows:', dataRows);
+                
+                // Find header row
+                let headerRowIndex = -1;
+                for (let i = 0; i < Math.min(5, dataRows.length); i++) {
+                    const row = dataRows[i];
+                    if (row && row.length >= 3) {
+                        const rowStr = row.join('|').toLowerCase();
+                        if (rowStr.includes('username') || rowStr.includes('user') || rowStr.includes('ผู้ใช้') ||
+                            rowStr.includes('password') || rowStr.includes('รหัส') ||
+                            rowStr.includes('role') || rowStr.includes('สิทธิ์')) {
+                            headerRowIndex = i;
+                            break;
+                        }
+                    }
+                }
+                
+                // If no header found, assume first row is data
+                if (headerRowIndex === -1) {
+                    headerRowIndex = -1; // Start from first row as data
+                }
+                
+                console.log('Users header row index:', headerRowIndex);
+                if (headerRowIndex >= 0) {
+                    console.log('Users header row:', dataRows[headerRowIndex]);
+                }
+                
+                showUsersUploadStatus('กำลังตรวจสอบข้อมูล...', 'loading');
+                
+                // Process data rows
+                let processedCount = 0;
+                for (let i = headerRowIndex + 1; i < dataRows.length; i++) {
+                    const row = dataRows[i];
+                    if (!row || row.length < 3) continue;
+                    
+                    // Skip empty rows
+                    if (row.every(cell => !cell || cell.toString().trim() === '')) continue;
+                    
+                    // Extract user data
+                    let username, password, role, className;
+                    
+                    // Assume standard order (Username, Password, Role, ClassName)
+                    username = row[0]?.toString().trim();
+                    password = row[1]?.toString().trim();
+                    role = row[2]?.toString().trim();
+                    className = row[3]?.toString().trim() || '';
+                    
+                    console.log(`Users Row ${i + 1}:`, { username, password, role, className });
+                    
+                    // Validate required fields
+                    if (!username || !password || !role) {
+                        errors.push(`แถว ${i + 1}: ข้อมูลไม่ครบถ้วน - ต้องมีชื่อผู้ใช้ รหัสผ่าน และระดับสิทธิ์`);
+                        continue;
+                    }
+                    
+                    // Validate role
+                    const validRoles = ['admin', 'teacher', 'view'];
+                    let normalizedRole = role.toLowerCase();
+                    if (!validRoles.includes(normalizedRole)) {
+                        // Try to match Thai roles
+                        if (role.includes('ผู้ดูแล') || role.includes('แอดมิน')) {
+                            normalizedRole = 'admin';
+                        } else if (role.includes('ครู') || role.includes('อาจารย์')) {
+                            normalizedRole = 'teacher';
+                        } else if (role.includes('ดู') || role.includes('อ่าน')) {
+                            normalizedRole = 'view';
+                        } else {
+                            errors.push(`แถว ${i + 1}: ระดับสิทธิ์ "${role}" ไม่ถูกต้อง (ใช้ค่าเริ่มต้น: view)`);
+                            normalizedRole = 'view';
+                        }
+                    }
+                    
+                    // Validate class name if provided
+                    let normalizedClassName = '';
+                    if (className && className !== '') {
+                        if (classes.includes(className)) {
+                            normalizedClassName = className;
+                        } else {
+                            const similarClass = classes.find(c => 
+                                c.toLowerCase().replace(/[.\s]/g, '') === className.toLowerCase().replace(/[.\s]/g, '')
+                            );
+                            if (similarClass) {
+                                normalizedClassName = similarClass;
+                            } else {
+                                errors.push(`แถว ${i + 1}: ชั้นเรียน "${className}" ไม่ถูกต้อง (จะไม่ระบุชั้นเรียน)`);
+                                normalizedClassName = '';
+                            }
+                        }
+                    }
+                    
+                    usersExcelData.push({
+                        username: username,
+                        password: password,
+                        role: normalizedRole,
+                        className: normalizedClassName
+                    });
+                    
+                    processedCount++;
+                }
+                
+                console.log('Processed users Excel data:', usersExcelData);
+                
+                if (errors.length > 0) {
+                    console.log('Users errors found:', errors);
+                    const errorMsg = 'พบข้อผิดพลาดในข้อมูล:\n' + 
+                                   errors.slice(0, 5).join('\n') + 
+                                   (errors.length > 5 ? `\n... และอีก ${errors.length - 5} ข้อผิดพลาด` : '');
+                    showAlert(errorMsg, 'warning');
+                }
+                
+                if (usersExcelData.length > 0) {
+                    showUsersUploadStatus(`ประมวลผลเสร็จสิ้น: พบข้อมูล ${usersExcelData.length} รายการ`, 'success');
+                    displayUsersExcelPreview();
+                    document.getElementById('importUsersExcelBtn').disabled = false;
+                } else {
+                    showUsersUploadStatus('ไม่พบข้อมูลที่ถูกต้องในไฟล์', 'error');
+                    showAlert('ไม่พบข้อมูลที่ถูกต้องในไฟล์\nกรุณาตรวจสอบรูปแบบข้อมูลในไฟล์ Excel\n\nรูปแบบที่ต้องการ:\nคอลัมน์ 1: ชื่อผู้ใช้\nคอลัมน์ 2: รหัสผ่าน\nคอลัมน์ 3: ระดับสิทธิ์ (admin/teacher/view)\nคอลัมน์ 4: ชั้นที่รับผิดชอบ (ไม่บังคับ)', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Error processing users Excel data:', error);
+                showUsersUploadStatus('เกิดข้อผิดพลาดในการประมวลผลข้อมูล', 'error');
+                showAlert('เกิดข้อผิดพลาดในการประมวลผลข้อมูล: ' + error.message, 'error');
+            }
+        }
+
+        function displayUsersExcelPreview() {
+            const tbody = document.getElementById('usersPreviewTableBody');
+            tbody.innerHTML = '';
+            
+            usersExcelData.slice(0, 10).forEach(user => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border-b border-gray-200 px-3 py-2">${user.username}</td>
+                    <td class="border-b border-gray-200 px-3 py-2">${'*'.repeat(user.password.length)}</td>
+                    <td class="border-b border-gray-200 px-3 py-2">${user.role}</td>
+                    <td class="border-b border-gray-200 px-3 py-2">${user.className || '-'}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            const summary = `จำนวนข้อมูลทั้งหมด: ${usersExcelData.length} รายการ${usersExcelData.length > 10 ? ' (แสดง 10 รายการแรก)' : ''}`;
+            document.getElementById('usersImportSummary').textContent = summary;
+            document.getElementById('usersPreviewSection').classList.remove('hidden');
+        }
+
+        async function importUsersExcelData() {
+            if (usersExcelData.length === 0) {
+                showAlert('ไม่มีข้อมูลให้นำเข้า', 'error');
+                return;
+            }
+            
+            console.log('Starting users import process with data:', usersExcelData);
+            
+            // Show import status
+            showUsersUploadStatus('กำลังตรวจสอบข้อมูลซ้ำ...', 'loading');
+            
+            // Check for duplicates
+            const duplicates = [];
+            const newUsers = [];
+            
+            for (const userData of usersExcelData) {
+                const existingUser = users.find(u => u.username === userData.username);
+                
+                if (existingUser) {
+                    duplicates.push(`${userData.username} (${userData.role})`);
+                } else {
+                    newUsers.push(userData);
+                }
+            }
+            
+            let confirmMsg = `📊 สรุปการนำเข้าข้อมูลผู้ใช้:\n\n`;
+            confirmMsg += `✅ ข้อมูลใหม่: ${newUsers.length} รายการ\n`;
+            if (duplicates.length > 0) {
+                confirmMsg += `⚠️ ข้อมูลซ้ำ (จะข้าม): ${duplicates.length} รายการ\n`;
+                if (duplicates.length <= 3) {
+                    confirmMsg += '\nรายการซ้ำ:\n' + duplicates.join('\n');
+                }
+            }
+            confirmMsg += '\n\n🔄 ต้องการดำเนินการนำเข้าหรือไม่?';
+            
+            const confirmed = await showConfirm(confirmMsg, 'ยืนยันการนำเข้าข้อมูลผู้ใช้');
+            if (!confirmed) {
+                showUsersUploadStatus('ยกเลิกการนำเข้าข้อมูล', 'warning');
+                return;
+            }
+            
+            if (newUsers.length === 0) {
+                showAlert('ไม่มีข้อมูลใหม่ให้นำเข้า\n(ข้อมูลทั้งหมดซ้ำกับที่มีอยู่แล้ว)', 'warning');
+                showUsersUploadStatus('ไม่มีข้อมูลใหม่ให้นำเข้า', 'warning');
+                return;
+            }
+            
+            try {
+                // Disable import button and show progress
+                const importBtn = document.getElementById('importUsersExcelBtn');
+                importBtn.disabled = true;
+                importBtn.textContent = 'กำลังนำเข้า...';
+                
+                console.log('Importing new users:', newUsers);
+                
+                // Import in smaller batches
+                const batchSize = 50;
+                let importCount = 0;
+                const totalBatches = Math.ceil(newUsers.length / batchSize);
+                
+                for (let i = 0; i < newUsers.length; i += batchSize) {
+                    const currentBatch = Math.floor(i / batchSize) + 1;
+                    showUsersUploadStatus(`กำลังนำเข้าข้อมูล... (${currentBatch}/${totalBatches})`, 'loading');
+                    
+                    const batch = db.batch();
+                    const batchUsers = newUsers.slice(i, i + batchSize);
+                    
+                    for (const userData of batchUsers) {
+                        const docRef = db.collection('users').doc();
+                        batch.set(docRef, {
+                            ...userData,
+                            createdAt: new Date(),
+                            updatedAt: new Date()
+                        });
+                        importCount++;
+                    }
+                    
+                    await batch.commit();
+                    console.log(`Imported users batch ${currentBatch}/${totalBatches}, count: ${batchUsers.length}`);
+                    
+                    // Small delay to prevent overwhelming Firestore
+                    if (currentBatch < totalBatches) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+                
+                showUsersUploadStatus('กำลังโหลดข้อมูลใหม่...', 'loading');
+                
+                // Reload data
+                await loadData();
+                
+                // Show success message
+                const successMsg = `🎉 นำเข้าข้อมูลผู้ใช้เรียบร้อยแล้ว!\n\n` +
+                                 `✅ นำเข้าสำเร็จ: ${importCount} รายการ\n` +
+                                 `⚠️ ข้ามข้อมูลซ้ำ: ${duplicates.length} รายการ`;
+                
+                showAlert(successMsg, 'success');
+                showUsersUploadStatus(`นำเข้าเสร็จสิ้น: ${importCount} รายการ`, 'success');
+                
+                // Close modal after a short delay
+                setTimeout(() => {
+                    closeUsersExcelUploadModal();
+                    // Switch to users tab and refresh display
+                    switchTab('users');
+                }, 1500);
+                
+            } catch (error) {
+                console.error('Error importing users Excel data:', error);
+                const errorMsg = `❌ เกิดข้อผิดพลาดในการนำเข้าข้อมูลผู้ใช้:\n\n${error.message}\n\nกรุณาลองใหม่อีกครั้ง`;
+                showAlert(errorMsg, 'error');
+                showUsersUploadStatus('เกิดข้อผิดพลาดในการนำเข้า', 'error');
+            } finally {
+                // Re-enable import button
+                const importBtn = document.getElementById('importUsersExcelBtn');
+                importBtn.disabled = false;
+                importBtn.textContent = 'นำเข้าข้อมูลผู้ใช้';
+            }
+        }
+
+        function setupExcelUploadHandlers() {
+            const fileInput = document.getElementById('excelFileInput');
+            const dropZone = document.getElementById('dropZone');
+            
+            // Click to select file
+            dropZone.addEventListener('click', () => fileInput.click());
+            
+            // File input change
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            // Drag and drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-blue-400', 'bg-blue-50');
+            });
+            
+            dropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFile(files[0]);
+                }
+            });
+        }
+
+        function openExcelUploadModal() {
+            // Check if teacher has permission to upload
+            if (currentUser && currentUser.role === 'teacher') {
+                showAlert('คุณไม่มีสิทธิ์อัปโหลดไฟล์ Excel\nกรุณาติดต่อผู้ดูแลระบบ', 'error');
+                return;
+            }
+            
+            document.getElementById('excelUploadModal').classList.remove('hidden');
+            document.getElementById('excelUploadModal').classList.add('flex');
+            resetExcelModal();
+        }
+
+        function closeExcelUploadModal() {
+            document.getElementById('excelUploadModal').classList.add('hidden');
+            document.getElementById('excelUploadModal').classList.remove('flex');
+            resetExcelModal();
+        }
+
+        function resetExcelModal() {
+            document.getElementById('excelFileInput').value = '';
+            document.getElementById('fileInfo').classList.add('hidden');
+            document.getElementById('previewSection').classList.add('hidden');
+            document.getElementById('importExcelBtn').disabled = true;
+            hideUploadStatus();
+            excelData = [];
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/)) {
+                showAlert('กรุณาเลือกไฟล์ Excel (.xlsx หรือ .xls)', 'error');
+                return;
+            }
+            
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileInfo').classList.remove('hidden');
+            
+            // Show loading status
+            showUploadStatus('กำลังอ่านไฟล์...', 'loading');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    console.log('Reading file:', file.name);
+                    showUploadStatus('กำลังแปลงข้อมูล...', 'loading');
+                    
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    console.log('Workbook sheets:', workbook.SheetNames);
+                    
+                    if (workbook.SheetNames.length === 0) {
+                        showUploadStatus('ไม่พบแผ่นงานในไฟล์ Excel', 'error');
+                        return;
+                    }
+                    
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // Parse with better error handling
+                    let jsonData;
+                    try {
+                        // Try multiple parsing methods
+                        jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                            header: 1,
+                            defval: '',
+                            blankrows: false,
+                            raw: false
+                        });
+                        
+                        // If that fails, try with different options
+                        if (!jsonData || jsonData.length === 0) {
+                            jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                                defval: '',
+                                blankrows: false
+                            });
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing worksheet:', parseError);
+                        showUploadStatus('เกิดข้อผิดพลาดในการแปลงข้อมูล Excel', 'error');
+                        return;
+                    }
+                    
+                    console.log('Parsed JSON data:', jsonData);
+                    
+                    if (!jsonData || jsonData.length === 0) {
+                        showUploadStatus('ไฟล์ Excel ว่างเปล่าหรือไม่มีข้อมูล', 'error');
+                        return;
+                    }
+                    
+                    showUploadStatus('กำลังประมวลผลข้อมูล...', 'loading');
+                    setTimeout(() => {
+                        processExcelData(jsonData);
+                    }, 100);
+                    
+                } catch (error) {
+                    console.error('Error reading Excel file:', error);
+                    showUploadStatus('เกิดข้อผิดพลาดในการอ่านไฟล์ Excel: ' + error.message, 'error');
+                }
+            };
+            
+            reader.onerror = function(error) {
+                console.error('FileReader error:', error);
+                showUploadStatus('เกิดข้อผิดพลาดในการอ่านไฟล์', 'error');
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processExcelData(rawData) {
+            excelData = [];
+            const errors = [];
+            
+            console.log('Raw Excel data:', rawData);
+            
+            try {
+                // Handle both array format and object format
+                let dataRows = [];
+                
+                if (Array.isArray(rawData) && rawData.length > 0) {
+                    if (Array.isArray(rawData[0])) {
+                        // Array format (header: 1)
+                        dataRows = rawData;
+                    } else {
+                        // Object format - convert to array format
+                        const keys = Object.keys(rawData[0]);
+                        dataRows = [keys]; // Header row
+                        rawData.forEach(obj => {
+                            const row = keys.map(key => obj[key]);
+                            dataRows.push(row);
+                        });
+                    }
+                } else {
+                    showUploadStatus('ไม่พบข้อมูลในไฟล์ Excel', 'error');
+                    return;
+                }
+                
+                console.log('Processed data rows:', dataRows);
+                
+                // Find header row
+                let headerRowIndex = -1;
+                for (let i = 0; i < Math.min(5, dataRows.length); i++) {
+                    const row = dataRows[i];
+                    if (row && row.length >= 3) {
+                        const rowStr = row.join('|').toLowerCase();
+                        if (rowStr.includes('class') || rowStr.includes('ชั้น') || 
+                            rowStr.includes('student') || rowStr.includes('นักเรียน') ||
+                            rowStr.includes('name') || rowStr.includes('ชื่อ')) {
+                            headerRowIndex = i;
+                            break;
+                        }
+                    }
+                }
+                
+                // If no header found, assume first row is data
+                if (headerRowIndex === -1) {
+                    headerRowIndex = -1; // Start from first row as data
+                }
+                
+                console.log('Header row index:', headerRowIndex);
+                if (headerRowIndex >= 0) {
+                    console.log('Header row:', dataRows[headerRowIndex]);
+                }
+                
+                showUploadStatus('กำลังตรวจสอบข้อมูล...', 'loading');
+                
+                // Process data rows
+                let processedCount = 0;
+                for (let i = headerRowIndex + 1; i < dataRows.length; i++) {
+                    const row = dataRows[i];
+                    if (!row || row.length < 3) continue;
+                    
+                    // Skip empty rows
+                    if (row.every(cell => !cell || cell.toString().trim() === '')) continue;
+                    
+                    // Try to identify columns automatically
+                    let className, studentNumber, studentFullName, gender;
+                    
+                    // Method 1: Assume standard order (ClassName, StudentNumber, StudentFullName, Gender)
+                    if (row.length >= 4) {
+                        className = row[0]?.toString().trim();
+                        studentNumber = row[1];
+                        studentFullName = row[2]?.toString().trim();
+                        gender = row[3]?.toString().trim();
+                    } else if (row.length === 3) {
+                        // Assume no class name, just number, name, gender
+                        studentNumber = row[0];
+                        studentFullName = row[1]?.toString().trim();
+                        gender = row[2]?.toString().trim();
+                        className = 'ป.1/1'; // Default class
+                    } else {
+                        errors.push(`แถว ${i + 1}: ข้อมูลไม่เพียงพอ (ต้องการอย่างน้อย 3 คอลัมน์)`);
+                        continue;
+                    }
+                    
+                    console.log(`Row ${i + 1}:`, { className, studentNumber, studentFullName, gender });
+                    
+                    // Convert student number
+                    let normalizedStudentNumber;
+                    if (typeof studentNumber === 'number') {
+                        normalizedStudentNumber = Math.floor(studentNumber);
+                    } else if (studentNumber) {
+                        const numStr = studentNumber.toString().replace(/[^\d]/g, '');
+                        normalizedStudentNumber = parseInt(numStr);
+                    }
+                    
+                    // Validate required fields
+                    if (!studentFullName || isNaN(normalizedStudentNumber)) {
+                        errors.push(`แถว ${i + 1}: ข้อมูลไม่ครบถ้วน - ต้องมีเลขที่และชื่อนักเรียน`);
+                        continue;
+                    }
+                    
+                    // Normalize class name
+                    let normalizedClassName = className || 'ป.1/1';
+                    if (className && !classes.includes(className)) {
+                        const similarClass = classes.find(c => 
+                            c.toLowerCase().replace(/[.\s]/g, '') === className.toLowerCase().replace(/[.\s]/g, '')
+                        );
+                        if (similarClass) {
+                            normalizedClassName = similarClass;
+                        } else {
+                            // Try to match pattern like "ป1/1" -> "ป.1/1"
+                            const classPattern = className.match(/([อป])\.?(\d+)\/(\d+)/);
+                            if (classPattern) {
+                                normalizedClassName = `${classPattern[1]}.${classPattern[2]}/${classPattern[3]}`;
+                                if (!classes.includes(normalizedClassName)) {
+                                    errors.push(`แถว ${i + 1}: ชั้นเรียน "${className}" ไม่ถูกต้อง (แก้เป็น ${normalizedClassName})`);
+                                }
+                            } else {
+                                normalizedClassName = 'ป.1/1'; // Default
+                                errors.push(`แถว ${i + 1}: ชั้นเรียน "${className}" ไม่ถูกต้อง (ใช้ค่าเริ่มต้น ป.1/1)`);
+                            }
+                        }
+                    }
+                    
+                    // Normalize gender
+                    let normalizedGender = 'ชาย'; // Default
+                    if (gender) {
+                        const genderLower = gender.toLowerCase();
+                        if (genderLower.includes('male') || genderLower.includes('ชาย') || 
+                            genderLower === 'm' || genderLower === 'boy') {
+                            normalizedGender = 'ชาย';
+                        } else if (genderLower.includes('female') || genderLower.includes('หญิง') || 
+                                   genderLower === 'f' || genderLower === 'girl') {
+                            normalizedGender = 'หญิง';
+                        } else if (['ชาย', 'หญิง'].includes(gender)) {
+                            normalizedGender = gender;
+                        } else {
+                            errors.push(`แถว ${i + 1}: เพศ "${gender}" ไม่ถูกต้อง (ใช้ค่าเริ่มต้น: ชาย)`);
+                        }
+                    }
+                    
+                    excelData.push({
+                        className: normalizedClassName,
+                        studentNumber: normalizedStudentNumber,
+                        studentFullName: studentFullName,
+                        gender: normalizedGender
+                    });
+                    
+                    processedCount++;
+                }
+                
+                console.log('Processed Excel data:', excelData);
+                
+                if (errors.length > 0) {
+                    console.log('Errors found:', errors);
+                    const errorMsg = 'พบข้อผิดพลาดในข้อมูล:\n' + 
+                                   errors.slice(0, 5).join('\n') + 
+                                   (errors.length > 5 ? `\n... และอีก ${errors.length - 5} ข้อผิดพลาด` : '');
+                    showAlert(errorMsg, 'warning');
+                }
+                
+                if (excelData.length > 0) {
+                    showUploadStatus(`ประมวลผลเสร็จสิ้น: พบข้อมูล ${excelData.length} รายการ`, 'success');
+                    displayExcelPreview();
+                    document.getElementById('importExcelBtn').disabled = false;
+                } else {
+                    showUploadStatus('ไม่พบข้อมูลที่ถูกต้องในไฟล์', 'error');
+                    showAlert('ไม่พบข้อมูลที่ถูกต้องในไฟล์\nกรุณาตรวจสอบรูปแบบข้อมูลในไฟล์ Excel\n\nรูปแบบที่ต้องการ:\nคอลัมน์ 1: ชั้นเรียน\nคอลัมน์ 2: เลขที่\nคอลัมน์ 3: ชื่อ-นามสกุล\nคอลัมน์ 4: เพศ', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Error processing Excel data:', error);
+                showUploadStatus('เกิดข้อผิดพลาดในการประมวลผลข้อมูล', 'error');
+                showAlert('เกิดข้อผิดพลาดในการประมวลผลข้อมูล: ' + error.message, 'error');
+            }
+        }
+
+        function displayExcelPreview() {
+            const tbody = document.getElementById('previewTableBody');
+            tbody.innerHTML = '';
+            
+            excelData.slice(0, 10).forEach(student => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border-b border-gray-200 px-3 py-2">${student.className}</td>
+                    <td class="border-b border-gray-200 px-3 py-2">${student.studentNumber}</td>
+                    <td class="border-b border-gray-200 px-3 py-2">${student.studentFullName}</td>
+                    <td class="border-b border-gray-200 px-3 py-2">${student.gender}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            const summary = `จำนวนข้อมูลทั้งหมด: ${excelData.length} รายการ${excelData.length > 10 ? ' (แสดง 10 รายการแรก)' : ''}`;
+            document.getElementById('importSummary').textContent = summary;
+            document.getElementById('previewSection').classList.remove('hidden');
+        }
+
+        async function importExcelData() {
+            if (excelData.length === 0) {
+                showAlert('ไม่มีข้อมูลให้นำเข้า', 'error');
+                return;
+            }
+            
+            console.log('Starting import process with data:', excelData);
+            
+            // Show import status
+            showUploadStatus('กำลังตรวจสอบข้อมูลซ้ำ...', 'loading');
+            
+            // Check for duplicates
+            const duplicates = [];
+            const newStudents = [];
+            
+            for (const studentData of excelData) {
+                const existingStudent = students.find(s => 
+                    s.className === studentData.className && 
+                    s.studentNumber === studentData.studentNumber
+                );
+                
+                if (existingStudent) {
+                    duplicates.push(`${studentData.className} เลขที่ ${studentData.studentNumber} - ${studentData.studentFullName}`);
+                } else {
+                    newStudents.push(studentData);
+                }
+            }
+            
+            let confirmMsg = `📊 สรุปการนำเข้าข้อมูล:\n\n`;
+            confirmMsg += `✅ ข้อมูลใหม่: ${newStudents.length} รายการ\n`;
+            if (duplicates.length > 0) {
+                confirmMsg += `⚠️ ข้อมูลซ้ำ (จะข้าม): ${duplicates.length} รายการ\n`;
+                if (duplicates.length <= 3) {
+                    confirmMsg += '\nรายการซ้ำ:\n' + duplicates.join('\n');
+                }
+            }
+            confirmMsg += '\n\n🔄 ต้องการดำเนินการนำเข้าหรือไม่?';
+            
+            const confirmed = await showConfirm(confirmMsg, 'ยืนยันการนำเข้าข้อมูล');
+            if (!confirmed) {
+                showUploadStatus('ยกเลิกการนำเข้าข้อมูล', 'warning');
+                return;
+            }
+            
+            if (newStudents.length === 0) {
+                showAlert('ไม่มีข้อมูลใหม่ให้นำเข้า\n(ข้อมูลทั้งหมดซ้ำกับที่มีอยู่แล้ว)', 'warning');
+                showUploadStatus('ไม่มีข้อมูลใหม่ให้นำเข้า', 'warning');
+                return;
+            }
+            
+            try {
+                // Disable import button and show progress
+                const importBtn = document.getElementById('importExcelBtn');
+                importBtn.disabled = true;
+                importBtn.textContent = 'กำลังนำเข้า...';
+                
+                console.log('Importing new students:', newStudents);
+                
+                // Import in smaller batches to avoid Firestore limits
+                const batchSize = 100; // Reduced batch size for better reliability
+                let importCount = 0;
+                const totalBatches = Math.ceil(newStudents.length / batchSize);
+                
+                for (let i = 0; i < newStudents.length; i += batchSize) {
+                    const currentBatch = Math.floor(i / batchSize) + 1;
+                    showUploadStatus(`กำลังนำเข้าข้อมูล... (${currentBatch}/${totalBatches})`, 'loading');
+                    
+                    const batch = db.batch();
+                    const batchStudents = newStudents.slice(i, i + batchSize);
+                    
+                    for (const studentData of batchStudents) {
+                        const docRef = db.collection('students').doc();
+                        batch.set(docRef, {
+                            ...studentData,
+                            createdAt: new Date(),
+                            updatedAt: new Date()
+                        });
+                        importCount++;
+                    }
+                    
+                    await batch.commit();
+                    console.log(`Imported batch ${currentBatch}/${totalBatches}, count: ${batchStudents.length}`);
+                    
+                    // Small delay to prevent overwhelming Firestore
+                    if (currentBatch < totalBatches) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+                
+                showUploadStatus('กำลังโหลดข้อมูลใหม่...', 'loading');
+                
+                // Reload data
+                await loadData();
+                
+                // Show success message
+                const successMsg = `🎉 นำเข้าข้อมูลเรียบร้อยแล้ว!\n\n` +
+                                 `✅ นำเข้าสำเร็จ: ${importCount} รายการ\n` +
+                                 `⚠️ ข้ามข้อมูลซ้ำ: ${duplicates.length} รายการ`;
+                
+                showAlert(successMsg, 'success');
+                showUploadStatus(`นำเข้าเสร็จสิ้น: ${importCount} รายการ`, 'success');
+                
+                // Close modal after a short delay
+                setTimeout(() => {
+                    closeExcelUploadModal();
+                    // Switch to students tab and refresh display
+                    switchTab('students');
+                }, 1500);
+                
+            } catch (error) {
+                console.error('Error importing Excel data:', error);
+                const errorMsg = `❌ เกิดข้อผิดพลาดในการนำเข้าข้อมูล:\n\n${error.message}\n\nกรุณาลองใหม่อีกครั้ง`;
+                showAlert(errorMsg, 'error');
+                showUploadStatus('เกิดข้อผิดพลาดในการนำเข้า', 'error');
+            } finally {
+                // Re-enable import button
+                const importBtn = document.getElementById('importExcelBtn');
+                importBtn.disabled = false;
+                importBtn.textContent = 'นำเข้าข้อมูล';
+            }
+        }
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9782b62517cf731c',t:'MTc1NjcwODE0OC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
