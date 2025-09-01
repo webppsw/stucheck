@@ -294,6 +294,14 @@
                             <button id="refreshSummary" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
                                 รีเฟรช
                             </button>
+                            <button id="exportDailySummaryExcel" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2">
+                                <span>📊</span>
+                                <span>Excel</span>
+                            </button>
+                            <button id="exportDailySummaryPDF" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center space-x-2">
+                                <span>📄</span>
+                                <span>PDF</span>
+                            </button>
                         </div>
                     </div>
                     
@@ -302,18 +310,23 @@
                             <thead>
                                 <tr class="bg-gray-50">
                                     <th class="border border-gray-300 px-4 py-3 text-left">ชั้นเรียน</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">นร.ทั้งหมด</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">ชาย</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">หญิง</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">มาชาย</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">มาหญิง</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">ขาดชาย</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">ขาดหญิง</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">ลาชาย</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">ลาหญิง</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">รวมมา</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">รวมขาด</th>
-                                    <th class="border border-gray-300 px-4 py-3 text-center">รวมลา</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center bg-blue-50" colspan="3">นักเรียนเดิม</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center bg-green-50" colspan="3">มาเรียน</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center bg-red-50" colspan="3">ไม่มาเรียน</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-center bg-yellow-50">มาเรียน<br>ร้อยละ</th>
+                                </tr>
+                                <tr class="bg-gray-50">
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs"></th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-blue-50">ชาย</th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-blue-50">หญิง</th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-blue-50">รวม</th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-green-50">ชาย</th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-green-50">หญิง</th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-green-50">รวม</th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-red-50">ชาย</th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-red-50">หญิง</th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-red-50">รวม</th>
+                                    <th class="border border-gray-300 px-2 py-2 text-center text-xs bg-yellow-50">%</th>
                                 </tr>
                             </thead>
                             <tbody id="summaryTableBody">
@@ -978,6 +991,8 @@
             document.getElementById('refreshSummary').addEventListener('click', updateSummary);
             document.getElementById('statusDate').addEventListener('change', updateAttendanceStatus);
             document.getElementById('refreshStatus').addEventListener('click', updateAttendanceStatus);
+            document.getElementById('exportDailySummaryExcel').addEventListener('click', exportDailySummaryExcel);
+            document.getElementById('exportDailySummaryPDF').addEventListener('click', exportDailySummaryPDF);
             
             // Monthly report
             document.getElementById('generateMonthlyReport').addEventListener('click', generateMonthlyReport);
@@ -1331,6 +1346,12 @@
                 const statusIcon = hasAttendanceData ? '✅' : '⏳';
                 const statusText = hasAttendanceData ? 'เช็คแล้ว' : 'รอเช็ค';
                 
+                // Calculate totals and percentages
+                const totalPresent = presentMale + presentFemale;
+                const totalAbsent = absentMale + absentFemale + leaveMale + leaveFemale;
+                const totalStudents = classStudents.length;
+                const attendancePercentage = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
+                
                 row.innerHTML = `
                     <td class="${classNameClass}">
                         <div class="flex items-center space-x-2">
@@ -1339,18 +1360,16 @@
                             <span class="text-xs ${hasAttendanceData ? 'text-green-600' : 'text-red-600'}">(${statusText})</span>
                         </div>
                     </td>
-                    <td class="${cellClass}">${classStudents.length}</td>
-                    <td class="${cellClass}">${maleStudents.length}</td>
-                    <td class="${cellClass}">${femaleStudents.length}</td>
-                    <td class="${cellClass} ${hasAttendanceData ? 'text-green-600 font-medium' : ''}">${presentMale}</td>
-                    <td class="${cellClass} ${hasAttendanceData ? 'text-green-600 font-medium' : ''}">${presentFemale}</td>
-                    <td class="${cellClass} ${hasAttendanceData ? 'text-red-600 font-medium' : ''}">${absentMale}</td>
-                    <td class="${cellClass} ${hasAttendanceData ? 'text-red-600 font-medium' : ''}">${absentFemale}</td>
-                    <td class="${cellClass} ${hasAttendanceData ? 'text-yellow-600 font-medium' : ''}">${leaveMale}</td>
-                    <td class="${cellClass} ${hasAttendanceData ? 'text-yellow-600 font-medium' : ''}">${leaveFemale}</td>
-                    <td class="${cellClass} ${hasAttendanceData ? 'text-green-600 font-bold' : 'font-medium'}">${presentMale + presentFemale}</td>
-                    <td class="${cellClass} ${hasAttendanceData ? 'text-red-600 font-bold' : 'font-medium'}">${absentMale + absentFemale}</td>
-                    <td class="${cellClass} ${hasAttendanceData ? 'text-yellow-600 font-bold' : 'font-medium'}">${leaveMale + leaveFemale}</td>
+                    <td class="${cellClass} bg-blue-50">${maleStudents.length}</td>
+                    <td class="${cellClass} bg-blue-50">${femaleStudents.length}</td>
+                    <td class="${cellClass} bg-blue-50 font-medium">${totalStudents}</td>
+                    <td class="${cellClass} bg-green-50 ${hasAttendanceData ? 'text-green-600 font-medium' : ''}">${presentMale}</td>
+                    <td class="${cellClass} bg-green-50 ${hasAttendanceData ? 'text-green-600 font-medium' : ''}">${presentFemale}</td>
+                    <td class="${cellClass} bg-green-50 ${hasAttendanceData ? 'text-green-600 font-bold' : 'font-medium'}">${totalPresent}</td>
+                    <td class="${cellClass} bg-red-50 ${hasAttendanceData ? 'text-red-600 font-medium' : ''}">${absentMale + leaveMale}</td>
+                    <td class="${cellClass} bg-red-50 ${hasAttendanceData ? 'text-red-600 font-medium' : ''}">${absentFemale + leaveFemale}</td>
+                    <td class="${cellClass} bg-red-50 ${hasAttendanceData ? 'text-red-600 font-bold' : 'font-medium'}">${totalAbsent}</td>
+                    <td class="${cellClass} bg-yellow-50 ${hasAttendanceData ? 'text-yellow-600 font-bold' : 'font-medium'}">${attendancePercentage}%</td>
                 `;
                 tbody.appendChild(row);
             }
@@ -2878,6 +2897,406 @@
             }
         }
 
+        // Daily Summary Export Functions
+        function exportDailySummaryExcel() {
+            const selectedDate = document.getElementById('summaryDate').value;
+            
+            if (!selectedDate) {
+                showAlert('กรุณาเลือกวันที่ก่อนส่งออก', 'warning');
+                return;
+            }
+            
+            try {
+                // Show loading message
+                showAlert('กำลังสร้างไฟล์ Excel กรุณารอสักครู่...', 'info');
+                
+                // Get table data
+                const table = document.querySelector('#summaryTableBody').parentElement;
+                if (!table) {
+                    showAlert('ไม่พบข้อมูลตารางให้ส่งออก', 'error');
+                    return;
+                }
+                
+                // Create workbook manually for better control
+                const wb = XLSX.utils.book_new();
+                
+                // Prepare data array
+                const data = [];
+                
+                // Add title and date
+                const dateObj = new Date(selectedDate);
+                const thaiDate = dateObj.toLocaleDateString('th-TH', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric',
+                    weekday: 'long'
+                });
+                
+                data.push(['รายงานสรุปการมาเรียนประจำวัน']);
+                data.push(['โรงเรียนพานพสกสวัสดิ์']);
+                data.push([`วันที่: ${thaiDate}`]);
+                data.push([]); // Empty row
+                
+                // Add headers
+                data.push([
+                    'ชั้นเรียน',
+                    'นักเรียนเดิม (ชาย)', 'นักเรียนเดิม (หญิง)', 'นักเรียนเดิม (รวม)',
+                    'มาเรียน (ชาย)', 'มาเรียน (หญิง)', 'มาเรียน (รวม)',
+                    'ไม่มาเรียน (ชาย)', 'ไม่มาเรียน (หญิง)', 'ไม่มาเรียน (รวม)',
+                    'มาเรียนร้อยละ'
+                ]);
+                
+                // Add data from table
+                const tbody = document.getElementById('summaryTableBody');
+                const rows = tbody.querySelectorAll('tr');
+                
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length > 0) {
+                        const rowData = [];
+                        
+                        // Extract class name (remove status icons)
+                        const classCell = cells[0];
+                        const className = classCell.textContent.replace(/[✅⏳]/g, '').replace(/\(.*?\)/g, '').trim();
+                        rowData.push(className);
+                        
+                        // Extract other data
+                        for (let i = 1; i < cells.length; i++) {
+                            let cellText = cells[i].textContent.trim();
+                            // Convert percentage to number
+                            if (cellText.endsWith('%')) {
+                                cellText = parseFloat(cellText.replace('%', ''));
+                            } else if (!isNaN(cellText)) {
+                                cellText = parseInt(cellText);
+                            }
+                            rowData.push(cellText);
+                        }
+                        
+                        data.push(rowData);
+                    }
+                });
+                
+                // Add summary totals
+                data.push([]); // Empty row
+                
+                // Calculate totals
+                let totalStudents = 0, totalPresent = 0, totalAbsent = 0;
+                let totalMale = 0, totalFemale = 0;
+                let totalPresentMale = 0, totalPresentFemale = 0;
+                let totalAbsentMale = 0, totalAbsentFemale = 0;
+                
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 11) {
+                        totalMale += parseInt(cells[1].textContent) || 0;
+                        totalFemale += parseInt(cells[2].textContent) || 0;
+                        totalPresentMale += parseInt(cells[4].textContent) || 0;
+                        totalPresentFemale += parseInt(cells[5].textContent) || 0;
+                        totalAbsentMale += parseInt(cells[7].textContent) || 0;
+                        totalAbsentFemale += parseInt(cells[8].textContent) || 0;
+                    }
+                });
+                
+                totalStudents = totalMale + totalFemale;
+                totalPresent = totalPresentMale + totalPresentFemale;
+                totalAbsent = totalAbsentMale + totalAbsentFemale;
+                const totalPercentage = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
+                
+                data.push([
+                    'รวมทั้งหมด',
+                    totalMale, totalFemale, totalStudents,
+                    totalPresentMale, totalPresentFemale, totalPresent,
+                    totalAbsentMale, totalAbsentFemale, totalAbsent,
+                    totalPercentage
+                ]);
+                
+                // Create worksheet from data
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                
+                // Set column widths
+                ws['!cols'] = [
+                    { wch: 15 }, // ชั้นเรียน
+                    { wch: 12 }, { wch: 12 }, { wch: 12 }, // นักเรียนเดิม
+                    { wch: 12 }, { wch: 12 }, { wch: 12 }, // มาเรียน
+                    { wch: 12 }, { wch: 12 }, { wch: 12 }, // ไม่มาเรียน
+                    { wch: 12 }  // ร้อยละ
+                ];
+                
+                // Style the worksheet
+                const range = XLSX.utils.decode_range(ws['!ref']);
+                
+                // Style title rows
+                for (let row = 0; row < 4; row++) {
+                    for (let col = range.s.c; col <= range.e.c; col++) {
+                        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+                        if (ws[cellAddress]) {
+                            ws[cellAddress].s = {
+                                font: { bold: true, sz: row === 0 ? 16 : 12 },
+                                alignment: { horizontal: 'center' }
+                            };
+                        }
+                    }
+                }
+                
+                // Style header row
+                for (let col = range.s.c; col <= range.e.c; col++) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: 4, c: col });
+                    if (ws[cellAddress]) {
+                        ws[cellAddress].s = {
+                            font: { bold: true },
+                            fill: { fgColor: { rgb: 'E5E7EB' } },
+                            alignment: { horizontal: 'center' },
+                            border: {
+                                top: { style: 'thin' },
+                                bottom: { style: 'thin' },
+                                left: { style: 'thin' },
+                                right: { style: 'thin' }
+                            }
+                        };
+                    }
+                }
+                
+                // Add worksheet to workbook
+                XLSX.utils.book_append_sheet(wb, ws, "สรุปประจำวัน");
+                
+                // Generate filename
+                const filename = `สรุปการมาเรียนประจำวัน_${selectedDate}.xlsx`;
+                
+                // Download file
+                XLSX.writeFile(wb, filename);
+                
+                setTimeout(() => {
+                    showAlert('ส่งออกรายงาน Excel เรียบร้อยแล้ว!\nไฟล์ถูกดาวน์โหลดไปยังโฟลเดอร์ Downloads แล้ว', 'success');
+                }, 500);
+                
+            } catch (error) {
+                console.error('Error exporting daily summary Excel:', error);
+                showAlert('เกิดข้อผิดพลาดในการส่งออกรายงาน: ' + error.message, 'error');
+            }
+        }
+        
+        async function exportDailySummaryPDF() {
+            const selectedDate = document.getElementById('summaryDate').value;
+            
+            if (!selectedDate) {
+                showAlert('กรุณาเลือกวันที่ก่อนส่งออก', 'warning');
+                return;
+            }
+            
+            try {
+                // Show loading message
+                showAlert('กำลังสร้างไฟล์ PDF กรุณารอสักครู่...', 'info');
+                
+                // Wait for libraries to load
+                if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
+                    showAlert('กำลังโหลดไลบรารี PDF กรุณารอสักครู่...', 'info');
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
+                        showAlert('ไม่สามารถโหลดไลบรารี PDF ได้ กรุณาลองใหม่อีกครั้ง', 'error');
+                        return;
+                    }
+                }
+                
+                // Create a temporary container for PDF export
+                const tempContainer = document.createElement('div');
+                tempContainer.style.position = 'absolute';
+                tempContainer.style.left = '-9999px';
+                tempContainer.style.top = '0';
+                tempContainer.style.width = '800px';
+                tempContainer.style.backgroundColor = 'white';
+                tempContainer.style.padding = '20px';
+                tempContainer.style.fontFamily = 'Arial, sans-serif';
+                tempContainer.style.zIndex = '-1000';
+                
+                // Create content for PDF
+                const dateObj = new Date(selectedDate);
+                const thaiDate = dateObj.toLocaleDateString('th-TH', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric',
+                    weekday: 'long'
+                });
+                
+                // Get table data
+                const tbody = document.getElementById('summaryTableBody');
+                const rows = tbody.querySelectorAll('tr');
+                
+                let tableHTML = `
+                    <div style="text-align: center; margin-bottom: 30px;">
+                        <h1 style="font-size: 24px; margin-bottom: 10px; font-weight: bold; color: #000;">
+                            รายงานสรุปการมาเรียนประจำวัน
+                        </h1>
+                        <h2 style="font-size: 18px; margin-bottom: 10px; color: #000;">
+                            โรงเรียนพานพสกสวัสดิ์
+                        </h2>
+                        <p style="font-size: 16px; margin-bottom: 20px; color: #666;">
+                            ${thaiDate}
+                        </p>
+                    </div>
+                    
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="background-color: #f0f0f0;">
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold;">ชั้นเรียน</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; background-color: #dbeafe;" colspan="3">นักเรียนเดิม</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; background-color: #dcfce7;" colspan="3">มาเรียน</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; background-color: #fee2e2;" colspan="3">ไม่มาเรียน</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; background-color: #fef3c7;">มาเรียน<br>ร้อยละ</th>
+                            </tr>
+                            <tr style="background-color: #f9f9f9;">
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px;"></th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #dbeafe;">ชาย</th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #dbeafe;">หญิง</th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #dbeafe;">รวม</th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #dcfce7;">ชาย</th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #dcfce7;">หญิง</th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #dcfce7;">รวม</th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #fee2e2;">ชาย</th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #fee2e2;">หญิง</th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #fee2e2;">รวม</th>
+                                <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px; background-color: #fef3c7;">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                // Add data rows
+                let totalMale = 0, totalFemale = 0, totalPresentMale = 0, totalPresentFemale = 0;
+                let totalAbsentMale = 0, totalAbsentFemale = 0;
+                
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length > 0) {
+                        // Extract class name (remove status icons)
+                        const classCell = cells[0];
+                        const className = classCell.textContent.replace(/[✅⏳]/g, '').replace(/\(.*?\)/g, '').trim();
+                        
+                        // Determine row color based on status
+                        const hasCheck = classCell.textContent.includes('✅');
+                        const rowBg = hasCheck ? '#f0fdf4' : '#fef2f2';
+                        
+                        tableHTML += `<tr style="background-color: ${rowBg};">`;
+                        tableHTML += `<td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${className}</td>`;
+                        
+                        // Add numeric data
+                        for (let i = 1; i < cells.length; i++) {
+                            const cellText = cells[i].textContent.trim();
+                            let bgColor = '';
+                            
+                            if (i >= 1 && i <= 3) bgColor = '#dbeafe'; // นักเรียนเดิม
+                            else if (i >= 4 && i <= 6) bgColor = '#dcfce7'; // มาเรียน
+                            else if (i >= 7 && i <= 9) bgColor = '#fee2e2'; // ไม่มาเรียน
+                            else if (i === 10) bgColor = '#fef3c7'; // ร้อยละ
+                            
+                            tableHTML += `<td style="border: 1px solid #000; padding: 6px; text-align: center; background-color: ${bgColor};">${cellText}</td>`;
+                        }
+                        
+                        tableHTML += '</tr>';
+                        
+                        // Calculate totals
+                        if (cells.length >= 11) {
+                            totalMale += parseInt(cells[1].textContent) || 0;
+                            totalFemale += parseInt(cells[2].textContent) || 0;
+                            totalPresentMale += parseInt(cells[4].textContent) || 0;
+                            totalPresentFemale += parseInt(cells[5].textContent) || 0;
+                            totalAbsentMale += parseInt(cells[7].textContent) || 0;
+                            totalAbsentFemale += parseInt(cells[8].textContent) || 0;
+                        }
+                    }
+                });
+                
+                // Add totals row
+                const totalStudents = totalMale + totalFemale;
+                const totalPresent = totalPresentMale + totalPresentFemale;
+                const totalAbsent = totalAbsentMale + totalAbsentFemale;
+                const totalPercentage = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
+                
+                tableHTML += `
+                        <tr style="background-color: #f3f4f6; font-weight: bold;">
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; font-weight: bold;">รวมทั้งหมด</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #dbeafe;">${totalMale}</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #dbeafe;">${totalFemale}</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #dbeafe;">${totalStudents}</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #dcfce7;">${totalPresentMale}</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #dcfce7;">${totalPresentFemale}</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #dcfce7;">${totalPresent}</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #fee2e2;">${totalAbsentMale}</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #fee2e2;">${totalAbsentFemale}</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #fee2e2;">${totalAbsent}</td>
+                            <td style="border: 2px solid #000; padding: 8px; text-align: center; background-color: #fef3c7;">${totalPercentage}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div style="margin-top: 20px; font-size: 10px; color: #666;">
+                    <p><strong>หมายเหตุ:</strong></p>
+                    <p>✅ = ชั้นที่เช็คชื่อแล้ว | ⏳ = ชั้นที่ยังไม่ได้เช็คชื่อ</p>
+                    <p>ไม่มาเรียน = ขาดเรียน + ลาเรียน</p>
+                </div>
+                `;
+                
+                tempContainer.innerHTML = tableHTML;
+                document.body.appendChild(tempContainer);
+                
+                try {
+                    // Use html2canvas to capture the content
+                    const canvas = await html2canvas(tempContainer, {
+                        scale: 1.5,
+                        useCORS: true,
+                        allowTaint: true,
+                        backgroundColor: '#ffffff',
+                        width: 800,
+                        height: tempContainer.scrollHeight,
+                        logging: false
+                    });
+                    
+                    // Remove temporary container
+                    document.body.removeChild(tempContainer);
+                    
+                    // Create PDF
+                    const { jsPDF } = window.jspdf;
+                    const pdf = new jsPDF({
+                        orientation: 'landscape',
+                        unit: 'mm',
+                        format: 'a4'
+                    });
+                    
+                    // Calculate dimensions
+                    const imgWidth = 297; // A4 landscape width in mm
+                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                    
+                    // Add image to PDF
+                    const imgData = canvas.toDataURL('image/png', 0.8);
+                    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, Math.min(imgHeight, 210));
+                    
+                    // Generate filename
+                    const filename = `สรุปการมาเรียนประจำวัน_${selectedDate}.pdf`;
+                    
+                    // Save PDF
+                    pdf.save(filename);
+                    
+                    setTimeout(() => {
+                        showAlert('ส่งออกรายงาน PDF เรียบร้อยแล้ว!\nไฟล์ถูกดาวน์โหลดไปยังโฟลเดอร์ Downloads แล้ว', 'success');
+                    }, 500);
+                    
+                } catch (canvasError) {
+                    console.error('Error creating PDF:', canvasError);
+                    
+                    // Remove temporary container if still exists
+                    if (tempContainer.parentNode) {
+                        document.body.removeChild(tempContainer);
+                    }
+                    
+                    throw canvasError;
+                }
+                
+            } catch (error) {
+                console.error('Error exporting daily summary PDF:', error);
+                showAlert('เกิดข้อผิดพลาดในการส่งออก PDF: ' + error.message, 'error');
+            }
+        }
+
         // Excel Upload Functions
         let excelData = [];
         let usersExcelData = [];
@@ -3822,5 +4241,5 @@
             }
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'978321d62633a1ae',t:'MTc1NjcxMjU1OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'978337da87b1a1ae',t:'MTc1NjcxMzQ2MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
